@@ -1,5 +1,10 @@
-*.log
-*.txt
+# generated diagnostics - may contain device names, never commit
 tpm-report-*
+tpm-paste.txt
+tpm.txt
+*.log
 luks-header.img
 .DS_Store
+
+# test fixtures are source, keep them
+!tpm/t/fixtures/*.txt
