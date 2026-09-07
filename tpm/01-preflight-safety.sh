@@ -9,28 +9,27 @@ RISK=0
 note() { err "$*"; RISK=$((RISK+1)); }
 
 hdr "1. LUKS volumes bound to the TPM"
-if have cryptsetup && have lsblk; then
+if have cryptsetup; then
+  ANY=0
   while read -r dev; do
-    cryptsetup isLuks "$dev" 2>/dev/null || continue
+    [[ -n "$dev" ]] || continue
+    ANY=1
     DUMP="$(cryptsetup luksDump "$dev" 2>/dev/null || true)"
-    if grep -qi 'systemd-tpm2' <<<"$DUMP"; then
-      note "$dev : systemd-cryptenroll TPM2 keyslot"
-    fi
-    if grep -qi 'clevis' <<<"$DUMP"; then
-      note "$dev : Clevis TPM2 binding"
-    fi
-    # Is there any plain passphrase slot left as an escape route?
+    grep -qi 'systemd-tpm2' <<<"$DUMP" && note "$dev : systemd-cryptenroll TPM2 keyslot"
+    grep -qi 'clevis'       <<<"$DUMP" && note "$dev : Clevis TPM2 binding"
+
+    # LUKS2 keyslot list, and how many of them are claimed by a TPM token
     SLOTS="$(grep -cE '^[[:space:]]+[0-9]+: luks2' <<<"$DUMP" || true)"
+    [[ "${SLOTS:-0}" == 0 ]] && SLOTS="$(grep -cE '^Key Slot [0-9]+: ENABLED' <<<"$DUMP" || true)"   # LUKS1
     TOKENS="$(grep -ciE 'systemd-tpm2|clevis' <<<"$DUMP" || true)"
-    if [[ "${SLOTS:-0}" -gt 0 ]]; then
-      info "$dev : $SLOTS keyslot(s), $TOKENS TPM-backed token(s)"
-      if [[ "${SLOTS:-0}" -le "${TOKENS:-0}" ]]; then
-        note "$dev : NO passphrase-only keyslot left -> wiping the TPM makes this volume UNOPENABLE"
-      fi
+    info "$dev : ${SLOTS:-0} keyslot(s), ${TOKENS:-0} TPM-backed token(s)"
+    if [[ "${TOKENS:-0}" -gt 0 && "${SLOTS:-0}" -le "${TOKENS:-0}" ]]; then
+      note "$dev : NO passphrase-only keyslot left -> wiping the TPM makes this volume UNOPENABLE"
     fi
-  done < <(lsblk -pnro NAME,TYPE 2>/dev/null | awk '$2=="part"{print $1}')
+  done < <(luks_devices)
+  (( ANY == 0 )) && ok "no LUKS containers found"
 else
-  warn "cryptsetup/lsblk missing, cannot check LUKS"
+  warn "cryptsetup missing, cannot check LUKS"
 fi
 
 hdr "2. Persistent objects stored in the TPM"

@@ -15,3 +15,5 @@ Small, self-contained sysadmin toolkits. Each directory stands alone — clone t
 - Anything destructive says so in its header, requires a typed confirmation, and has a
   read-only preflight script next to it.
 - No secrets in the repo, and no script writes a password to disk.
+- Where parsing logic exists, there is an offline `t/selftest.sh` with recorded
+  fixtures so it can be tested without the hardware.

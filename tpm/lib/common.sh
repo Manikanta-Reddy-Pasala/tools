@@ -130,3 +130,33 @@ run_tpm() {
   fi
   return $rc
 }
+
+# ---------- disk helpers ----------
+# All LUKS containers, whatever they sit on (partition, whole disk, LVM, mdraid).
+luks_devices() {
+  local seen=""
+  if have blkid; then
+    while read -r d; do
+      [[ -n "$d" ]] && { echo "$d"; seen="$seen $d"; }
+    done < <(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null || true)
+  fi
+  if have lsblk && have cryptsetup; then
+    while read -r d t; do
+      case "$t" in part|disk|lvm|raid*|dm*) ;; *) continue ;; esac
+      [[ " $seen " == *" $d "* ]] && continue
+      [[ -b "$d" ]] || continue
+      cryptsetup isLuks "$d" 2>/dev/null && echo "$d"
+    done < <(lsblk -pnro NAME,TYPE 2>/dev/null || true)
+  fi
+}
+
+# Warn early when the TPM device exists but is unreadable by this user.
+check_tpm_access() {
+  local dev=""
+  [[ -c /dev/tpmrm0 ]] && dev=/dev/tpmrm0
+  [[ -z "$dev" && -c /dev/tpm0 ]] && dev=/dev/tpm0
+  [[ -z "$dev" ]] && return 0
+  if [[ ! -r "$dev" || ! -w "$dev" ]]; then
+    warn "$dev not read/write for uid $(id -u). Re-run with sudo, or: sudo usermod -aG tss \"$USER\" && newgrp tss"
+  fi
+}

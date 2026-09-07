@@ -18,9 +18,13 @@ commands — so the fix is gated behind the thing that is broken. Full explanati
 ## Start here
 
 ```bash
-sudo ./install-deps.sh     # tpm2-tools, once
-sudo ./tpm-doctor.sh       # reads state, prints the exact next command
+sudo ./install-deps.sh              # tpm2-tools, once
+sudo ./tpm-doctor.sh                # reads state, prints the exact next command
+sudo ./paste-me.sh | tee tpm.txt    # one compact block to share when asking for help
 ```
+
+`paste-me.sh` is read-only and never attempts a password — a failed lockout-auth
+attempt restarts the `lockoutRecovery` timer and makes the situation worse.
 
 ## Scripts
 
@@ -36,8 +40,10 @@ sudo ./tpm-doctor.sh       # reads state, prints the exact next command
 | `05-set-lockout-params.sh` | no | set maxTries / interval / recovery |
 | `06-set-hierarchy-auth.sh` | no | set or clear owner/endorsement/lockout passwords |
 | `07-reenroll-luks.sh` | no | re-bind `systemd-cryptenroll` TPM unlock after a clear |
+| `paste-me.sh` | no | compact, chat-pasteable state dump (no secrets, no auth attempts) |
 | `decode-rc.sh` | no | explain a TPM return code (`0x921`, `0x184`, …) |
 | `99-collect-report.sh` | no | one text file with everything, for sharing |
+| `t/selftest.sh` | no | offline test of the parsers — needs no TPM |
 
 ## Danger
 
@@ -78,10 +84,22 @@ sudo RECOVERY=0 ./05-set-lockout-params.sh
 always gets you out. Firmware defaults of 24 h are what turn a typo into a day of
 downtime.
 
+## Tests
+
+```bash
+./t/selftest.sh
+```
+
+Runs the `properties-variable` parser, `human_secs`, the return-code decoder and the
+auth-argument builder against recorded `tpm2_getcap` fixtures. No TPM required, so it
+works on any machine — 27 assertions.
+
 ## Notes
 
-- Scripts need bash 4+ (`mapfile`). Ubuntu is fine; macOS `/bin/bash` 3.2 is not —
-  run them on the target machine.
+- Scripts need bash 4+ (`mapfile`, `${x,,}`). Ubuntu is fine; macOS `/bin/bash` 3.2 is
+  not — run them on the target machine.
+- Reading `/dev/tpmrm0` needs root or membership of the `tss` group. The scripts warn
+  when the device is present but not accessible.
 - TCTI is auto-detected: `/dev/tpmrm0`, then `/dev/tpm0`, then `tabrmd`. Override with
   `TPM2TOOLS_TCTI=...`.
 - No script writes a password to disk or to the report.

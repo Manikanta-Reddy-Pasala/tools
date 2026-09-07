@@ -4,6 +4,7 @@ set -euo pipefail
 source "$(dirname "$(readlink -f "$0")")/lib/common.sh"
 
 setup_tpm_env
+check_tpm_access
 load_varcap
 
 hdr "device"
@@ -19,7 +20,13 @@ if [[ -r /sys/class/tpm/tpm0/device/description ]]; then
   info "description     : $(cat /sys/class/tpm/tpm0/device/description)"
 fi
 MANU="$(tpm2_getcap properties-fixed 2>/dev/null | sed -n '/TPM2_PT_MANUFACTURER/,/value/s/.*value:[[:space:]]*"\(.*\)"/\1/p' | head -n1 || true)"
-[[ -n "$MANU" ]] && info "manufacturer    : $MANU  ${MANU/INTC/(Intel PTT = firmware TPM)}"
+if [[ -n "$MANU" ]]; then
+  case "$MANU" in
+    INTC*) info "manufacturer    : $MANU  (Intel PTT - FIRMWARE TPM, so BIOS has no 'Clear TPM' item; see bios-nuc15-pro.md)" ;;
+    AMD*)  info "manufacturer    : $MANU  (AMD fTPM - firmware TPM)" ;;
+    *)     info "manufacturer    : $MANU  (discrete TPM chip - BIOS should expose a real 'Clear TPM' / 'Pending Operation')" ;;
+  esac
+fi
 
 hdr "permanent flags"
 for f in ownerAuthSet endorsementAuthSet lockoutAuthSet disableClear inLockout tpmGeneratedEPS; do
@@ -55,21 +62,18 @@ printf '    %-20s = %s\n' "lockoutRecovery" "$(human_secs "${RCV:-0}")"
 
 hdr "what is sealed to this TPM (clearing destroys these)"
 FOUND=0
-if have cryptsetup; then
-  while read -r dev; do
-    [[ -b "$dev" ]] || continue
-    if cryptsetup isLuks "$dev" 2>/dev/null; then
-      if cryptsetup luksDump "$dev" 2>/dev/null | grep -qi 'systemd-tpm2'; then
-        err "LUKS $dev has a systemd-tpm2 keyslot -> auto-unlock BREAKS if TPM cleared"
-        FOUND=1
-      fi
-      if cryptsetup luksDump "$dev" 2>/dev/null | grep -qi 'clevis'; then
-        err "LUKS $dev has a Clevis binding -> auto-unlock BREAKS if TPM cleared"
-        FOUND=1
-      fi
-    fi
-  done < <(lsblk -pnro NAME,TYPE 2>/dev/null | awk '$2=="part"||$2=="crypt"{print $1}')
-fi
+while read -r dev; do
+  [[ -n "$dev" ]] || continue
+  DUMP="$(cryptsetup luksDump "$dev" 2>/dev/null || true)"
+  if grep -qi 'systemd-tpm2' <<<"$DUMP"; then
+    err "LUKS $dev has a systemd-tpm2 keyslot -> auto-unlock BREAKS if TPM cleared"
+    FOUND=1
+  fi
+  if grep -qi 'clevis' <<<"$DUMP"; then
+    err "LUKS $dev has a Clevis binding -> auto-unlock BREAKS if TPM cleared"
+    FOUND=1
+  fi
+done < <(luks_devices)
 if [[ -d /var/lib/clevis ]] || have clevis; then
   warn "clevis present on system"
 fi
