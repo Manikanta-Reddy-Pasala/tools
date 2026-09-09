@@ -88,6 +88,70 @@ fi
 [[ -f /etc/crypttab ]] && { echo "crypttab tpm2 lines:"; grep -i tpm2 /etc/crypttab 2>/dev/null | sed 's/^/  /' || echo "  none"; }
 have mokutil && kv "secureboot" "$(mokutil --sb-state 2>&1 | head -n1)"
 
+sec "clevis / luks bindings"
+if have clevis; then
+  kv "clevis" "$(clevis 2>&1 | head -n1 || echo present)"
+  for sub in pass regen; do
+    has_clevis_subcmd "$sub" && kv "clevis luks $sub" "available" || kv "clevis luks $sub" "MISSING"
+  done
+  while read -r dev; do
+    [[ -n "$dev" ]] || continue
+    ROWS="$(clevis_slots "$dev" || true)"
+    if [[ -z "$ROWS" ]]; then kv "$dev" "no clevis bindings"; continue; fi
+    while read -r sl pin cfg; do
+      [[ -n "${sl:-}" ]] || continue
+      if [[ "$pin" == tpm2 ]] && ! clevis_cfg_has_pcrs "$cfg"; then
+        kv "$dev slot $sl" "$pin $cfg  <-- NO pcr_ids, unseals in ANY boot state"
+      else
+        kv "$dev slot $sl" "$pin $cfg"
+      fi
+    done <<<"$ROWS"
+  done < <(luks_devices)
+else
+  echo "  clevis not installed"
+fi
+
+sec "PPI (firmware-side clear, no password needed)"
+PPIDIR=/sys/class/tpm/tpm0/ppi
+if [[ -d "$PPIDIR" ]]; then
+  for f in version request response transition_action; do
+    [[ -r "$PPIDIR/$f" ]] && kv "$f" "$(cat "$PPIDIR/$f")"
+  done
+  echo "clear opcodes (<op> <status>: <text>):"
+  grep -E '^[[:space:]]*(5|14|21|22)[[:space:]]' "$PPIDIR/tcg_operations" 2>/dev/null | sed 's/^/  /' \
+    || echo "  (none listed)"
+else
+  kv "ppi" "ABSENT - firmware-side clear not reachable from the OS"
+fi
+
+sec "lockout auth provenance (read-only, NO auth attempted, value NOT printed)"
+LA_P="$(prop lockoutAuthSet)"; OA_P="$(prop ownerAuthSet)"; EA_P="$(prop endorsementAuthSet)"
+if [[ "$LA_P" != "1" ]]; then
+  echo "  lockoutAuth is EMPTY - DA params are settable right now, no password needed."
+else
+  if [[ "$OA_P" == "0" && "$EA_P" == "0" ]]; then
+    echo "  owner=0 endorsement=0 lockout=1 -> Windows auto-provisioning signature."
+  else
+    echo "  owner=$OA_P endorsement=$EA_P lockout=1 -> something took full ownership."
+  fi
+  kv "hivexget" "$(have hivexget && echo present || echo 'MISSING - apt install libhivex-bin')"
+  HIVE_N=0; RECOVERABLE=no
+  while read -r h; do
+    [[ -n "$h" ]] || continue
+    HIVE_N=$((HIVE_N+1))
+    B64="$(windows_ownerauth_b64 "$h")"
+    if [[ -n "$B64" ]]; then
+      RECOVERABLE=yes
+      kv "hive" "$h"
+      kv "OwnerAuthFull" "FOUND, $(printf '%s' "$B64" | base64 -d 2>/dev/null | wc -c | tr -d ' ') bytes (value withheld)"
+    fi
+  done < <(find_windows_hives)
+  kv "windows hives mounted" "$HIVE_N"
+  U="$(unmounted_ntfs)"
+  [[ -n "$U" ]] && kv "unmounted NTFS" "$(echo $U) -> mount -o ro and re-run to recover"
+  kv "password recoverable" "$RECOVERABLE"
+fi
+
 sec "kernel tpm messages (last 25)"
 dmesg 2>/dev/null | grep -i tpm | tail -n 25 | sed 's/^/  /' || echo "  (dmesg needs root)"
 
@@ -106,5 +170,24 @@ if [[ "$IN" == "1" ]]; then
                      || echo "  phEnable=1 -> tpm2_clear -c p should work."
 else
   echo "  not in lockout."
+fi
+
+echo
+echo "  CAN THE DA PARAMETERS (maxTries / lockoutInterval / lockoutRecovery) BE RESET?"
+echo "  TPM2_DictionaryAttackParameters is authorised by the lockout hierarchy. There"
+echo "  is no bypass - that is the design, not a missing feature."
+if [[ "$LA_P" != "1" ]]; then
+  echo "  YES, now:  sudo RECOVERY=0 ./05-set-lockout-params.sh"
+elif [[ "${RECOVERABLE:-no}" == "yes" ]]; then
+  echo "  YES, with the recovered Windows password:"
+  echo "    sudo ./08-recover-windows-auth.sh          # prints it"
+  echo "    sudo RECOVERY=0 ./05-set-lockout-params.sh 'hex:<value>'"
+else
+  echo "  NOT without the password. Options, best first:"
+  echo "    1. mount any Windows partition read-only, re-run ./08-recover-windows-auth.sh"
+  echo "    2. read it in Windows:  (Get-Tpm).OwnerAuth"
+  echo "    3. accept it - lockoutAuth gates ONLY DictionaryAttackParameters and"
+  echo "       LockReset. Sealing, unsealing, clevis and LUKS unlock are unaffected."
+  echo "    4. clear the TPM - resets it to empty, DESTROYS every sealed key."
 fi
 echo '```'

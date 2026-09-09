@@ -244,3 +244,28 @@ ppi_status_text() {
     *) echo "unknown status" ;;
   esac
 }
+
+# ---------- Windows registry (lockout auth provenance) ----------
+# Windows calls the TPM2 LOCKOUT hierarchy "the TPM owner password", provisions it
+# automatically, and keeps it base64 in the SYSTEM hive. That is why a Linux-only box
+# can still show lockoutAuthSet=1.
+find_windows_hives() {
+  find /mnt /media /run/media /win /windows -maxdepth 6 \
+       -ipath '*/Windows/System32/config/SYSTEM' -type f 2>/dev/null || true
+}
+
+unmounted_ntfs() {
+  have lsblk || return 0
+  lsblk -pnro NAME,FSTYPE,MOUNTPOINT 2>/dev/null \
+    | awk '($2=="ntfs"||$2=="ntfs3") && $3==""{print $1}'
+}
+
+# windows_ownerauth_b64 <hive> -> base64 value, or empty
+windows_ownerauth_b64() {
+  local hive="$1" cs v
+  have hivexget || return 0
+  for cs in ControlSet001 ControlSet002 CurrentControlSet; do
+    v="$(hivexget "$hive" "$cs\\Services\\TPM\\WMI\\Admin" OwnerAuthFull 2>/dev/null || true)"
+    [[ -n "$v" ]] && { printf '%s\n' "$v"; return 0; }
+  done
+}

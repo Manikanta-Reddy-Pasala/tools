@@ -58,13 +58,9 @@ done
 hdr "3. Windows registry hives"
 have hivexget || warn "hivexget missing - apt install libhivex-bin   (or chntpw for 'reged')"
 HIVES=()
-while read -r h; do [[ -n "$h" ]] && HIVES+=("$h"); done < <(
-  # already-mounted Windows installs
-  find /mnt /media /run/media /win /windows -maxdepth 6 \
-       -ipath '*/Windows/System32/config/SYSTEM' -type f 2>/dev/null || true
-)
+while read -r h; do [[ -n "$h" ]] && HIVES+=("$h"); done < <(find_windows_hives)
 if (( ${#HIVES[@]} == 0 )); then
-  NTFS="$(lsblk -pnro NAME,FSTYPE 2>/dev/null | awk '$2=="ntfs"||$2=="ntfs3"{print $1}' || true)"
+  NTFS="$(unmounted_ntfs)"
   if [[ -n "$NTFS" ]]; then
     warn "NTFS partition(s) found but not mounted. Mount read-only, then re-run:"
     for d in $NTFS; do echo "      sudo mkdir -p /mnt/win && sudo mount -o ro $d /mnt/win"; done
@@ -78,15 +74,12 @@ AUTH_B64=""
 for hive in ${HIVES[@]+"${HIVES[@]}"}; do
   info "hive: $hive"
   have hivexget || continue
-  for cs in ControlSet001 ControlSet002 CurrentControlSet; do
-    V="$(hivexget "$hive" "$cs\\Services\\TPM\\WMI\\Admin" OwnerAuthFull 2>/dev/null || true)"
-    if [[ -n "$V" ]]; then
-      ok "$cs\\Services\\TPM\\WMI\\Admin\\OwnerAuthFull found"
-      AUTH_B64="$V"
-      break
-    fi
-  done
-  [[ -n "$AUTH_B64" ]] && break
+  V="$(windows_ownerauth_b64 "$hive")"
+  if [[ -n "$V" ]]; then
+    ok "Services\\TPM\\WMI\\Admin\\OwnerAuthFull found"
+    AUTH_B64="$V"
+    break
+  fi
 done
 
 if [[ -z "$AUTH_B64" ]]; then
