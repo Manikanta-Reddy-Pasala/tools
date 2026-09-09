@@ -36,6 +36,30 @@ run() {
   "$@"
 }
 
+# `cryptsetup --key-file=-` is BYTE-EXACT: it does not trim a trailing newline. clevis,
+# by contrast, line-reads the passphrase and so drops one. A passphrase typed at an
+# interactive prompt (every normal install) has no trailing newline, so the no-newline
+# form is the realistic one and is tried first. The others are tried only as fallbacks,
+# for a volume whose passphrase was set from a keyfile and therefore really does end in
+# a newline. A wrong passphrase is rejected by every form, so this loosens nothing - it
+# only stops a correct passphrase being wrongly refused, which here would read as
+# "there is no way back in" right before an irreversible wipe.
+luks_pass_ok() {
+  local pass="$1" dev="$2"
+  printf '%s'   "$pass" | cryptsetup open --test-passphrase "$dev" --key-file=- >/dev/null 2>&1 && return 0
+  printf '%s\n' "$pass" | cryptsetup open --test-passphrase "$dev" --key-file=- >/dev/null 2>&1 && return 0
+  printf '%s\n' "$pass" | cryptsetup open --test-passphrase "$dev"             >/dev/null 2>&1 && return 0
+  return 1
+}
+
+# Same reasoning for the handoff to clevis: its documented no-newline form first.
+clevis_bind() {
+  local pass="$1" dev="$2" cfg="{\"pcr_bank\":\"$PCR_BANK\",\"pcr_ids\":\"$PCR_IDS\"}"
+  printf '%s'   "$pass" | clevis luks bind -y -k - -d "$dev" tpm2 "$cfg" 2>/dev/null && return 0
+  printf '%s\n' "$pass" | clevis luks bind -y -k - -d "$dev" tpm2 "$cfg" && return 0
+  return 1
+}
+
 [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,22p' "$0"; exit 0; }
 STATUS_ONLY=0
 [[ "${1:-}" == "--status" ]] && STATUS_ONLY=1
@@ -111,14 +135,12 @@ if [[ "$LOCKAUTH" == "0" ]]; then
     printf 'existing LUKS passphrase for %s: ' "$DEV" >&2
     read -r -s PASS; echo >&2
     [[ -n "$PASS" ]] || die "empty passphrase"
-    printf '%s' "$PASS" | cryptsetup open --test-passphrase "$DEV" - >/dev/null 2>&1 \
-      || die "that passphrase does not open $DEV"
+    luks_pass_ok "$PASS" "$DEV" || die "that passphrase does not open $DEV"
     g "  passphrase verified"
     # -k - is required: without it clevis reads with an unguarded `read` inside
     # `#!/bin/bash -e`, and a pipe with no trailing newline kills it mid-bind.
     if [[ "$DRY" == 1 ]]; then printf '  DRY: clevis luks bind -y -k - -d %s tpm2 {...pcr_ids:%s}\n' "$DEV" "$PCR_IDS"
-    else printf '%s' "$PASS" | clevis luks bind -y -k - -d "$DEV" tpm2 \
-           "{\"pcr_bank\":\"$PCR_BANK\",\"pcr_ids\":\"$PCR_IDS\"}" || die "bind failed"; fi
+    else clevis_bind "$PASS" "$DEV" || die "bind failed"; fi
     unset PASS
     g "  bound to PCR $PCR_IDS"
 
@@ -160,7 +182,7 @@ b "1a. can you open $DEV without the TPM?"
 printf 'existing LUKS passphrase for %s: ' "$DEV" >&2
 read -r -s PASS1; echo >&2
 [[ -n "$PASS1" ]] || die "empty passphrase - refusing to clear a TPM you cannot recover from"
-printf '%s' "$PASS1" | cryptsetup open --test-passphrase "$DEV" - >/dev/null 2>&1 \
+luks_pass_ok "$PASS1" "$DEV" \
   || die "that passphrase does not open $DEV. Refusing to go further - you would not get back in."
 unset PASS1
 g "  passphrase verified - you can boot without the TPM"
