@@ -7,8 +7,13 @@
 set -euo pipefail
 source "$(dirname "$(readlink -f "$0")")/lib/common.sh"
 
+# Parse --help before touching the TPM: asking what a script does must not require
+# tpm2-tools, a TPM, or root.
+for a in "$@"; do
+  case "$a" in -h|--help) sed -n '2,10p' "$0"; exit 0 ;; esac
+done
+
 setup_tpm_env
-need_root "$@"
 
 FORCE=0
 AUTH="${LOCKOUT_AUTH:-}"
@@ -19,6 +24,7 @@ for a in "$@"; do
     *) AUTH="$a" ;;
   esac
 done
+need_root "$@"
 
 load_varcap
 hdr "state"
@@ -54,6 +60,33 @@ cat <<'MSG'
 --------------------------------------------------------------------------
 MSG
 
+hdr "clevis bindings"
+STRANDED=0
+if have clevis; then
+  while read -r dev; do
+    [[ -n "$dev" ]] || continue
+    while read -r slot pin cfg; do
+      [[ -n "${slot:-}" ]] || continue
+      STRANDED=1
+      err "$dev slot $slot ($pin) will be DEAD after this clear"
+    done < <(clevis_slots "$dev")
+  done < <(luks_devices)
+fi
+if (( STRANDED == 1 )); then
+  cat <<'MSG'
+
+  A cleared TPM cannot decrypt a Clevis JWE, and the keyslot stays in the header.
+  The initramfs will still try it, fail, and drop you at a passphrase prompt.
+  Do these two things first:
+
+    sudo ./09-clevis.sh rescue     # read the passphrase back out of the TPM
+    sudo ./09-clevis.sh unbind     # remove the slots that are about to die
+
+  Then clear, then: sudo ./09-clevis.sh bind && sudo ./09-clevis.sh verify
+MSG
+  (( FORCE == 0 )) && die "refusing while live Clevis bindings exist. Re-run with --force to override."
+fi
+
 confirm_typed "CLEAR MY TPM AND DESTROY ITS KEYS"
 
 hdr "attempt 1/2: lockout hierarchy"
@@ -73,11 +106,16 @@ else
 
 Nothing in the OS can clear this TPM now. Remaining options, in order:
 
-  1. Power cycle and retry immediately (some firmware leaves the platform
+  1. Ask the FIRMWARE to clear it on the next boot. Needs no password, works
+     while inLockout=1, and works on boards with no "Clear TPM" menu item
+     (ASUS NUC 15 Pro / Intel PTT):
+       sudo ./10-ppi-clear.sh
+  2. Power cycle and retry immediately (some firmware leaves the platform
      hierarchy enabled early; a systemd unit ordered before other TPM users
      can win the race - see docs/early-clear.md)
-  2. BIOS: toggle Intel PTT off -> boot -> on. See bios-nuc15-pro.md
-  3. BIOS security jumper -> Maintenance Mode. See bios-nuc15-pro.md
+  3. BIOS: toggle Intel PTT off -> boot -> on. See bios-nuc15-pro.md
+  4. BIOS security jumper -> Maintenance Mode. Same doc.
+
 MSG
     exit 1
   fi
@@ -90,4 +128,5 @@ for f in ownerAuthSet endorsementAuthSet lockoutAuthSet inLockout; do
 done
 ok "all hierarchy auths are now EMPTY - you own the TPM again"
 info "next: sudo RECOVERY=0 ./05-set-lockout-params.sh    # so this can never brick you again"
-info "then: ./07-reenroll-luks.sh                          # if you had TPM disk unlock"
+info "then: ./07-reenroll-luks.sh                          # systemd-cryptenroll disk unlock"
+info "  or: ./09-clevis.sh bind && ./09-clevis.sh verify        # clevis disk unlock"

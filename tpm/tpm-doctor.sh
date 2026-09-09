@@ -31,12 +31,26 @@ fi
 
 if [[ "$IN" == "0" && "$LA" == "1" ]]; then
   warn "Not locked, but a lockout password is set."
+  OA="$(prop ownerAuthSet)"; EA="$(prop endorsementAuthSet)"
+  if [[ "$OA" == "0" && "$EA" == "0" ]]; then
+    info "owner and endorsement auth are EMPTY - only the lockout hierarchy is owned."
+    info "No Linux disk-encryption tool does that. Windows does, on first boot, and it"
+    info "keeps a copy of the password. Recover it instead of wiping the TPM:"
+    info "  sudo $HERE/08-recover-windows-auth.sh"
+  fi
   cat <<MSG
+
     Know the password?
       sudo $HERE/05-set-lockout-params.sh 'yourpassword'
-    Lost it?  Only a TPM clear resets it to empty:
+    Recover it from a Windows install on this machine:
+      sudo $HERE/08-recover-windows-auth.sh
+    Truly lost?  Only a TPM clear resets it to empty:
       sudo $HERE/01-preflight-safety.sh     # check what you would destroy
       sudo $HERE/04-clear-tpm.sh
+
+    Note: lockoutAuth gates ONLY TPM2_DictionaryAttackParameters and LockReset.
+    Sealing, unsealing, clevis and systemd-cryptenroll use the OWNER hierarchy and
+    keep working. If you do not need to tune DA params, living with it costs nothing.
 MSG
   exit 0
 fi
@@ -64,8 +78,9 @@ if [[ "$DC" == "1" ]]; then
 fi
 if [[ "$PH" == "0" ]]; then
   echo "      phEnable=0 -> 'tpm2_clear -c p' will fail with 0x184."
-  echo "      The OS cannot clear this TPM. Go to BIOS:"
-  echo "        see $HERE/bios-nuc15-pro.md  (toggle Intel PTT off -> boot -> on)"
+  echo "      No OS-side clear is possible. Ask the FIRMWARE to do it instead:"
+  echo "        sudo $HERE/10-ppi-clear.sh    # TCG Physical Presence request, works with no BIOS menu item"
+  echo "      Or, if PPI is unavailable: $HERE/bios-nuc15-pro.md (toggle Intel PTT off -> boot -> on)"
 else
   echo "      phEnable=1 -> the platform hierarchy is still open, this should work:"
   echo "        sudo $HERE/04-clear-tpm.sh"

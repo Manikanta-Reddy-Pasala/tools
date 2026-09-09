@@ -160,3 +160,78 @@ check_tpm_access() {
     warn "$dev not read/write for uid $(id -u). Re-run with sudo, or: sudo usermod -aG tss \"$USER\" && newgrp tss"
   fi
 }
+
+# ---------- clevis helpers ----------
+# Clevis binds LUKS keyslots to a TPM policy. Unlike systemd-cryptenroll it stores
+# its state in LUKS2 tokens, so it needs its own detection and its own re-bind path.
+
+# Parse `clevis luks list` from stdin. Split out from clevis_slots so the parser can
+# be tested with no clevis and no TPM. Real output looks like:
+#   1: tpm2 '{"hash":"sha256","key":"ecc","pcr_bank":"sha256","pcr_ids":"7"}'
+parse_clevis_list() {
+  sed -n "s/^\([0-9]\{1,\}\):[[:space:]]*\([a-z0-9]\{1,\}\)[[:space:]]*'\(.*\)'[[:space:]]*$/\1 \2 \3/p"
+}
+
+# clevis_slots <dev> -> lines of "<slot> <pin> <config-json>"
+clevis_slots() {
+  local dev="$1"
+  have clevis || return 0
+  clevis luks list -d "$dev" 2>/dev/null | parse_clevis_list
+}
+
+# True when the JSON config has no pcr_ids -> the binding is not tied to boot state.
+clevis_cfg_has_pcrs() {
+  local cfg="$1"
+  [[ "$cfg" == *pcr_ids* ]]
+}
+
+# Number of enabled keyslots on a LUKS device (LUKS2 and LUKS1).
+luks_keyslot_count() {
+  local dump; dump="$(cryptsetup luksDump "$1" 2>/dev/null || true)"
+  local n
+  n="$(grep -cE '^[[:space:]]+[0-9]+: luks2' <<<"$dump" || true)"
+  [[ "${n:-0}" == 0 ]] && n="$(grep -cE '^Key Slot [0-9]+: ENABLED' <<<"$dump" || true)"
+  echo "${n:-0}"
+}
+
+# Pick the LUKS device when there is exactly one; otherwise make the caller choose.
+# Replaces the fragile `lsblk -r | grep -B1 crypt | grep part` idiom.
+pick_luks_device() {
+  local -a devs=()
+  mapfile -t devs < <(luks_devices)
+  case "${#devs[@]}" in
+    0) die "no LUKS container found on this system" ;;
+    1) printf '%s\n' "${devs[0]}" ;;
+    *) err "more than one LUKS container - name one explicitly:"
+       printf '      %s\n' "${devs[@]}" >&2
+       exit 1 ;;
+  esac
+}
+
+# ---------- TCG Physical Presence Interface ----------
+# The kernel prints one line per opcode as "<op> <status>: <text>" (tpm_ppi.c), e.g.
+#   5 4: User not required
+# Status: 0 not implemented, 1 firmware only, 2 blocked by firmware,
+#         3 allowed, physically present user REQUIRED (firmware prompts),
+#         4 allowed, physically present user NOT required (firmware does NOT prompt).
+# ppi_op_status <opcode> < ops-file  -> the numeric status, or "" if absent
+ppi_op_status() {
+  local op="$1"
+  sed -n "s/^[[:space:]]*${op}[[:space:]]\{1,\}\([0-9]\{1,\}\):.*/\1/p" | head -n1
+}
+
+# True when the opcode is usable (status 3 or 4).
+ppi_op_allowed() {
+  case "${1:-}" in 3|4) return 0 ;; *) return 1 ;; esac
+}
+
+ppi_status_text() {
+  case "${1:-}" in
+    0) echo "not implemented" ;;
+    1) echo "firmware only - the OS cannot request it" ;;
+    2) echo "blocked for the OS by firmware" ;;
+    3) echo "allowed, firmware WILL prompt for physical presence" ;;
+    4) echo "allowed, firmware will NOT prompt - the reboot clears it silently" ;;
+    *) echo "unknown status" ;;
+  esac
+}

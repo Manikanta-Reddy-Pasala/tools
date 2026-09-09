@@ -16,7 +16,17 @@ if have cryptsetup; then
     ANY=1
     DUMP="$(cryptsetup luksDump "$dev" 2>/dev/null || true)"
     grep -qi 'systemd-tpm2' <<<"$DUMP" && note "$dev : systemd-cryptenroll TPM2 keyslot"
-    grep -qi 'clevis'       <<<"$DUMP" && note "$dev : Clevis TPM2 binding"
+    if grep -qi 'clevis' <<<"$DUMP"; then
+      note "$dev : Clevis TPM2 binding"
+      while read -r slot pin cfg; do
+        [[ -n "${slot:-}" ]] || continue
+        printf '      slot %-3s pin=%-6s %s\n' "$slot" "$pin" "$cfg"
+        if [[ "$pin" == tpm2 ]] && ! clevis_cfg_has_pcrs "$cfg"; then
+          note "$dev slot $slot : no pcr_ids -> unseals in ANY boot state (see ./09-clevis.sh status)"
+        fi
+      done < <(clevis_slots "$dev")
+      info "rescue the key it holds BEFORE any clear: sudo ./09-clevis.sh rescue $dev"
+    fi
 
     # LUKS2 keyslot list, and how many of them are claimed by a TPM token
     SLOTS="$(grep -cE '^[[:space:]]+[0-9]+: luks2' <<<"$DUMP" || true)"

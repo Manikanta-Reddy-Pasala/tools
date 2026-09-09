@@ -56,6 +56,37 @@ hdr "empty-array expansion is safe under set -u"
 mapfile -t A < <(auth_args -p "")
 is "expands to zero args" "$(printf '%s' "${A[@]+"${A[@]}"}")" ""
 
+hdr "clevis luks list parser"
+CL="$(parse_clevis_list < "$HERE/fixtures/clevis-luks-list.txt")"
+is "three bindings parsed"      "$(wc -l <<<"$CL" | tr -d ' ')"                    "3"
+is "slot 1 row"                 "$(sed -n 1p <<<"$CL" | cut -d' ' -f1-2)"          "1 tpm2"
+is "slot 3 pin is tang"         "$(sed -n 3p <<<"$CL" | cut -d' ' -f2)"            "tang"
+is "config json survives quotes" "$(sed -n 2p <<<"$CL" | cut -d' ' -f3-)"          '{"hash":"sha256","key":"ecc","pcr_bank":"sha256","pcr_ids":"7"}'
+is "no trailing quote in cfg"   "$(sed -n 1p <<<"$CL" | grep -c "'" || true)"      "0"
+is "junk lines ignored"         "$(printf 'not a binding\nSlot 9 blah\n' | parse_clevis_list | wc -l | tr -d ' ')" "0"
+
+hdr "pcr policy detection - the unsafe-bind check"
+clevis_cfg_has_pcrs '{"pcr_bank":"sha256"}'              && R=yes || R=no
+is "pcr_bank alone is NOT pcr-sealed" "$R" "no"
+clevis_cfg_has_pcrs '{"pcr_bank":"sha256","pcr_ids":"7"}' && R=yes || R=no
+is "pcr_ids present is pcr-sealed"    "$R" "yes"
+clevis_cfg_has_pcrs '{"pcr_ids":"0,2,4,7"}'               && R=yes || R=no
+is "multiple pcr_ids"                 "$R" "yes"
+
+hdr "PPI operation-list parser (real ASUS/Intel NUC tcg_operations)"
+PPIF="$HERE/fixtures/ppi-tcg-operations.txt"
+is "op 5 status"                "$(ppi_op_status 5  < "$PPIF")" "4"
+is "op 18 status"               "$(ppi_op_status 18 < "$PPIF")" "3"
+is "op 12 status (unimplemented)" "$(ppi_op_status 12 < "$PPIF")" "0"
+is "absent op -> empty"         "$(ppi_op_status 999 < "$PPIF")" ""
+is "op 2 is not matched by op 22 prefix" "$(ppi_op_status 2 < "$PPIF")" "4"
+ppi_op_allowed 4 && R=yes || R=no; is "status 4 allowed" "$R" "yes"
+ppi_op_allowed 3 && R=yes || R=no; is "status 3 allowed" "$R" "yes"
+ppi_op_allowed 0 && R=yes || R=no; is "status 0 refused" "$R" "no"
+ppi_op_allowed 2 && R=yes || R=no; is "status 2 (blocked) refused" "$R" "no"
+like "status 4 text warns of no prompt" "$(ppi_status_text 4)" "will NOT prompt"
+like "status 3 text promises a prompt"  "$(ppi_status_text 3)" "WILL prompt"
+
 hdr "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

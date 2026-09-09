@@ -20,6 +20,17 @@ MSG
 fi
 
 cryptsetup isLuks "$DEV" || die "$DEV is not a LUKS device"
+
+# Clevis and systemd-cryptenroll are different enrollment systems. Sending a clevis
+# user down this path leaves the old binding in place and adds a second, competing one.
+if have clevis && [[ -n "$(clevis_slots "$DEV")" ]]; then
+  err "$DEV is enrolled with CLEVIS, not systemd-cryptenroll."
+  info "use the clevis path instead:"
+  info "  sudo ./09-clevis.sh status  $DEV"
+  info "  sudo ./09-clevis.sh unbind  $DEV     # drop slots the cleared TPM can no longer satisfy"
+  info "  sudo ./09-clevis.sh bind    $DEV"
+  exit 1
+fi
 have systemd-cryptenroll || die "systemd-cryptenroll not found"
 
 hdr "current keyslots"
@@ -40,6 +51,10 @@ cat <<'MSG'
 Make sure /etc/crypttab has tpm2-device=auto on that volume, then:
   sudo update-initramfs -u -k all       # Ubuntu
   # or: sudo dracut -f
+
+Ubuntu 22.04 note: cryptsetup-initramfs only pulls a volume into the initramfs when
+its crypttab options include `initramfs`, e.g.
+  nvme0n1p3_crypt UUID=... none luks,discard,tpm2-device=auto,initramfs
 
 Keep a passphrase keyslot forever. Verify before you reboot:
   sudo cryptsetup open --test-passphrase DEVICE && echo "passphrase still works"

@@ -16,6 +16,49 @@ sudo tpm2_getcap properties-fixed | grep -A2 TPM2_PT_MANUFACTURER
 # value: "IFX"/"NTC"/"STM"  -> discrete chip, look for a real Clear TPM menu item
 ```
 
+## Method 0 — ask the firmware to clear it (TCG Physical Presence)
+
+**Try this before touching BIOS menus.** The absence of a "Clear TPM" item does not
+mean the firmware cannot clear the TPM — it means it will not do it from a menu. The
+Physical Presence Interface is the standard way an OS *requests* the clear: you park
+an opcode in firmware-owned NV, reboot, and the firmware puts up its own full-screen
+confirmation. It needs no lockout password and it works while `inLockout = 1`,
+because the firmware performs `TPM2_Clear` as the platform, not as an authorised user.
+
+Ubuntu 22.04's kernel exposes it at `/sys/class/tpm/tpm0/ppi/`:
+
+```bash
+ls /sys/class/tpm/tpm0/ppi/           # version request response transition_action tcg_operations
+cat /sys/class/tpm/tpm0/ppi/tcg_operations | grep -iE '^\s*(5|14|21|22):'
+sudo ./10-ppi-clear.sh                # queues the request, after the safety check
+sudo reboot                           # then ACCEPT the firmware prompt, at the machine
+```
+
+**Check whether you get a confirmation screen at all.** `tcg_operations` prints one
+line per opcode as `<op> <status>: <text>`, and the status is what matters:
+
+| status | meaning |
+|---|---|
+| 0 | not implemented |
+| 1 | firmware only — the OS cannot request it |
+| 2 | blocked for the OS by firmware |
+| 3 | allowed, **firmware prompts** for physical presence |
+| 4 | allowed, **no prompt** — the reboot clears the TPM silently |
+
+Measured on this hardware, opcodes 5 / 14 / 21 / 22 all report **`4: User not
+required`**. So on an Intel PTT NUC there is *no* "are you sure" screen: the moment
+you reboot, the TPM is gone. `10-ppi-clear.sh` prints this status and shouts about it
+before it writes anything, and it runs `01-preflight-safety.sh` first. Withdraw a
+queued request with `sudo ./10-ppi-clear.sh --cancel`.
+
+Where the status is `3` instead, the firmware puts up its own full-screen "A
+configuration change was requested to clear the TPM" page and waits for a keypress at
+the machine — that one cannot be answered over SSH, and declining it is safe.
+
+If nothing happened at boot, read `/sys/class/tpm/tpm0/ppi/response` afterwards — it
+carries the firmware's result code, e.g. `22 0: Success` — and fall through to
+Method 1.
+
 ## Method 1 — PTT off/on (this is the clear)
 
 > This destroys everything sealed to the TPM. Run `./01-preflight-safety.sh` first
@@ -73,7 +116,8 @@ fix, but if you are updating anyway, check TPM state afterwards.
 ```bash
 sudo ./00-status.sh                        # confirm all auths empty
 sudo RECOVERY=0 ./05-set-lockout-params.sh # never brick yourself again
-sudo ./07-reenroll-luks.sh /dev/nvmeXn1pY  # if you used TPM disk unlock
+sudo ./07-reenroll-luks.sh /dev/nvmeXn1pY  # systemd-cryptenroll disk unlock
+sudo ./09-clevis.sh bind && sudo ./09-clevis.sh verify   # clevis disk unlock
 ```
 
 `RECOVERY=0` is the important one: it means a failed lockout auth locks the TPM only

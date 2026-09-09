@@ -4,9 +4,15 @@ Recovery and hardening scripts for TPM 2.0 on Linux — built for the case where
 `tpm2_dictionarylockout` password was set, then lost, and the TPM refuses every
 command that would undo it.
 
-Target: Ubuntu / Debian, `tpm2-tools` 4.x or 5.x. Written against an **ASUS NUC 15
-Pro** (Intel PTT firmware TPM), but nothing here is board-specific except
-`bios-nuc15-pro.md`.
+Target: Ubuntu / Debian, `tpm2-tools` 4.x or 5.x. Developed and tested on **Ubuntu
+22.04 (jammy)** — tpm2-tools 5.2, clevis 18, `libhivex-bin` for the Windows
+password recovery — against an **ASUS NUC 15 Pro** (Intel PTT firmware TPM).
+Nothing is board-specific except `bios-nuc15-pro.md`.
+
+It also covers the neighbouring question **"`lockoutAuthSet = 1` but nobody set a
+password"** — see [`docs/who-set-lockoutauth.md`](docs/who-set-lockoutauth.md). Short
+answer: no Linux disk-encryption tool touches the lockout hierarchy, Windows does, and
+Windows keeps a copy you can read back.
 
 ## The problem these solve
 
@@ -40,6 +46,9 @@ attempt restarts the `lockoutRecovery` timer and makes the situation worse.
 | `05-set-lockout-params.sh` | no | set maxTries / interval / recovery |
 | `06-set-hierarchy-auth.sh` | no | set or clear owner/endorsement/lockout passwords |
 | `07-reenroll-luks.sh` | no | re-bind `systemd-cryptenroll` TPM unlock after a clear |
+| `08-recover-windows-auth.sh` | no | find out who set `lockoutAuth`, and get it back from Windows |
+| `09-clevis.sh` | partly | clevis TPM2 bindings: status / rescue / unbind / bind / verify |
+| `10-ppi-clear.sh` | **YES** (next boot) | ask the firmware to clear the TPM via the TCG Physical Presence Interface |
 | `paste-me.sh` | no | compact, chat-pasteable state dump (no secrets, no auth attempts) |
 | `decode-rc.sh` | no | explain a TPM return code (`0x921`, `0x184`, …) |
 | `99-collect-report.sh` | no | one text file with everything, for sharing |
@@ -67,12 +76,45 @@ TPM-only keyslot.
 ## Recovery order (no lockout password)
 
 1. `sudo ./tpm-doctor.sh`
-2. Full power cycle — shutdown, unplug, hold power 15 s, boot. Clears the lockout
+2. `sudo ./08-recover-windows-auth.sh` — non-destructive, and on an ex-Windows box it
+   usually just hands you the password.
+3. Full power cycle — shutdown, unplug, hold power 15 s, boot. Clears the lockout
    outright when `lockoutRecovery == 0`.
-3. Wait out `lockoutRecovery` idle: `sudo ./02-wait-out-lockout.sh`
-4. `sudo ./01-preflight-safety.sh` then `sudo ./04-clear-tpm.sh`
-5. BIOS: Intel PTT off → boot → on. See [`bios-nuc15-pro.md`](bios-nuc15-pro.md)
-6. BIOS security jumper → Maintenance Mode. Same doc.
+4. Wait out `lockoutRecovery` idle: `sudo ./02-wait-out-lockout.sh`
+5. `sudo ./09-clevis.sh rescue` then `unbind`, if a Clevis binding holds your disk key.
+6. `sudo ./01-preflight-safety.sh` then `sudo ./04-clear-tpm.sh`
+7. `sudo ./10-ppi-clear.sh` — firmware-side clear. **This is the one for a board with
+   no "Clear TPM" menu item**, which includes every Intel PTT NUC.
+8. BIOS: Intel PTT off → boot → on. See [`bios-nuc15-pro.md`](bios-nuc15-pro.md)
+9. BIOS security jumper → Maintenance Mode. Same doc.
+
+## Clevis
+
+`clevis luks bind` uses the **owner** hierarchy, never the lockout one, so
+`lockoutAuthSet = 1` does not block it. What it does block is `05-set-lockout-params.sh`
+and `03-clear-lockout.sh`, nothing else.
+
+Two things worth checking on an existing binding:
+
+```bash
+sudo ./09-clevis.sh status     # flags a binding with no pcr_ids
+sudo ./09-clevis.sh rescue     # reads the passphrase back out, before any TPM clear
+```
+
+A config of `'{"pcr_bank":"sha256"}'` with **no `pcr_ids`** seals to nothing. The TPM
+hands the key over in any boot state at all — a different kernel, Secure Boot turned
+off, an attacker's USB stick. It is not disk encryption at that point, it is a key
+printed on the motherboard. Bind with a PCR set:
+
+```bash
+sudo PCR_IDS=7 ./09-clevis.sh bind        # 7 = Secure Boot state
+sudo update-initramfs -u -k all
+sudo ./09-clevis.sh verify                # proves it unseals, without gambling a reboot
+```
+
+`09-clevis.sh bind` prompts for the passphrase instead of taking it on the command
+line: `echo -e "pw" | clevis luks bind ...` leaves your disk passphrase in shell
+history and, briefly, in `/proc/<pid>/cmdline`.
 
 ## Afterwards
 
