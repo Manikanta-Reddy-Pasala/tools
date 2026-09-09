@@ -87,6 +87,24 @@ ppi_op_allowed 2 && R=yes || R=no; is "status 2 (blocked) refused" "$R" "no"
 like "status 4 text warns of no prompt" "$(ppi_status_text 4)" "will NOT prompt"
 like "status 3 text promises a prompt"  "$(ppi_status_text 3)" "WILL prompt"
 
+hdr "clevis subcommand detection (the jammy false-negative)"
+SHIM="$(mktemp -d)"
+cat > "$SHIM/clevis" <<'SH'
+#!/usr/bin/env bash
+# Mimics Ubuntu 22.04 clevis 18: getopts ":d:s:" means --help is not a flag, so it
+# falls into usage() and exits 1. --summary is handled and exits 0.
+[[ "$1" == luks && "$2" == pass && "$3" == "--summary" ]] && { echo "Returns the LUKS passphrase"; exit 0; }
+[[ "$1" == luks && "$2" == pass ]] && { echo "Usage: clevis luks pass -d DEV -s SLT" >&2; exit 1; }
+[[ "$1" == luks && "$2" == nosuch ]] && { echo "unknown" >&2; exit 1; }
+exit 1
+SH
+chmod +x "$SHIM/clevis"
+OLDPATH="$PATH"; PATH="$SHIM:$PATH"
+is "--help would have said exit 1"   "$(clevis luks pass --help >/dev/null 2>&1; echo $?)" "1"
+has_clevis_subcmd pass   && R=yes || R=no; is "pass detected via --summary" "$R" "yes"
+has_clevis_subcmd nosuch && R=yes || R=no; is "absent subcommand still refused" "$R" "no"
+PATH="$OLDPATH"; rm -rf "$SHIM"
+
 hdr "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

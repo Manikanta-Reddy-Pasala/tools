@@ -47,7 +47,7 @@ attempt restarts the `lockoutRecovery` timer and makes the situation worse.
 | `06-set-hierarchy-auth.sh` | no | set or clear owner/endorsement/lockout passwords |
 | `07-reenroll-luks.sh` | no | re-bind `systemd-cryptenroll` TPM unlock after a clear |
 | `08-recover-windows-auth.sh` | no | find out who set `lockoutAuth`, and get it back from Windows |
-| `09-clevis.sh` | partly | clevis TPM2 bindings: status / rescue / unbind / bind / verify |
+| `09-clevis.sh` | partly | clevis TPM2 bindings: status / rescue / rebind / unbind / bind / verify |
 | `10-ppi-clear.sh` | **YES** (next boot) | ask the firmware to clear the TPM via the TCG Physical Presence Interface |
 | `paste-me.sh` | no | compact, chat-pasteable state dump (no secrets, no auth attempts) |
 | `decode-rc.sh` | no | explain a TPM return code (`0x921`, `0x184`, …) |
@@ -104,17 +104,41 @@ sudo ./09-clevis.sh rescue     # reads the passphrase back out, before any TPM c
 A config of `'{"pcr_bank":"sha256"}'` with **no `pcr_ids`** seals to nothing. The TPM
 hands the key over in any boot state at all — a different kernel, Secure Boot turned
 off, an attacker's USB stick. It is not disk encryption at that point, it is a key
-printed on the motherboard. Bind with a PCR set:
+printed on the motherboard.
+
+### Fixing an unpinned binding without the passphrase
+
+You do not need the LUKS passphrase to repair this, and you must not unbind first.
+The still-working binding *is* the key: `clevis luks pass` asks the TPM to unseal it
+and hands you back a full LUKS passphrase for the volume.
 
 ```bash
-sudo PCR_IDS=7 ./09-clevis.sh bind        # 7 = Secure Boot state
+sudo PCR_IDS=7 ./09-clevis.sh rebind
 sudo update-initramfs -u -k all
-sudo ./09-clevis.sh verify                # proves it unseals, without gambling a reboot
 ```
 
-`09-clevis.sh bind` prompts for the passphrase instead of taking it on the command
-line: `echo -e "pw" | clevis luks bind ...` leaves your disk passphrase in shell
-history and, briefly, in `/proc/<pid>/cmdline`.
+`rebind` runs the only safe order — recover the key from the live binding, add a new
+PCR-sealed slot, **verify that new slot unseals**, and only then drop the unpinned
+ones. It refuses to remove anything if the new slot fails to bind or fails to unseal,
+and it refuses to leave fewer than two keyslots. Unbinding first would strand the box
+on manual unlock if the rebind then failed.
+
+`bind` is the path for when there is no working binding left to harvest — after a TPM
+clear, or on a fresh volume. It prompts for the passphrase rather than taking it on
+the command line, because `echo -e "pw" | clevis luks bind ...` leaves your disk
+passphrase in shell history and, briefly, in `/proc/<pid>/cmdline`.
+
+### Two clevis traps this hit for real
+
+`clevis luks pass --help` **exits 1 even where the subcommand exists** — the
+subcommands parse with `getopts ":d:s:"`, so `--help` is not a flag and falls into
+`usage()`. Probing with it reports Ubuntu 22.04's perfectly good clevis 18 as "too
+old". `--summary` is the argument every clevis subcommand handles and exits 0 on.
+
+`clevis luks bind` without `-k -` reads the passphrase with an unguarded
+`IFS= read -r -s -p ...` inside a `#!/bin/bash -e` script. Pipe it a key whose last
+line has no newline and `read` returns 1 at EOF, killing clevis before it binds
+anything. `-k -` is the guarded, documented non-interactive path.
 
 ## Afterwards
 

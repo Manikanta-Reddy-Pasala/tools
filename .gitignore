@@ -3,6 +3,7 @@ tpm-report-*
 tpm-paste.txt
 tpm.txt
 *.log
+logs/
 luks-header.img
 .DS_Store
 

@@ -165,6 +165,15 @@ check_tpm_access() {
 # Clevis binds LUKS keyslots to a TPM policy. Unlike systemd-cryptenroll it stores
 # its state in LUKS2 tokens, so it needs its own detection and its own re-bind path.
 
+# clevis subcommands parse with `getopts ":d:s:"`, so `--help` is NOT a flag: it falls
+# through to usage() and exits 1. Probing with --help therefore reports a perfectly
+# good clevis as "too old" - which is exactly what it did on Ubuntu 22.04's clevis 18.
+# `--summary` is the one argument every clevis subcommand handles, and it exits 0.
+has_clevis_subcmd() {
+  command -v "clevis-luks-$1" >/dev/null 2>&1 && return 0
+  clevis luks "$1" --summary >/dev/null 2>&1
+}
+
 # Parse `clevis luks list` from stdin. Split out from clevis_slots so the parser can
 # be tested with no clevis and no TPM. Real output looks like:
 #   1: tpm2 '{"hash":"sha256","key":"ecc","pcr_bank":"sha256","pcr_ids":"7"}'
