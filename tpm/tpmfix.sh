@@ -213,6 +213,66 @@ keyscript_slot() {
   sed -n 's/^Key slot \([0-9]\{1,\}\) unlocked.*/\1/p' <<<"$out" | head -n1
 }
 
+# ---------------------------------------------------------------- live mapping
+# The name $DEV is open under right now (e.g. "dm_crypt-0"), or nothing.
+live_name() {
+  local n dev
+  command -v dmsetup >/dev/null || return 0
+  for n in $(dmsetup ls --target crypt 2>/dev/null | awk '$1 != "No" { print $1 }'); do
+    dev="$(cryptsetup status "$n" 2>/dev/null | sed -n 's/^[[:space:]]*device:[[:space:]]*//p' | head -n1)"
+    if [[ -n "$dev" && "$(readlink -f "$dev")" == "$(readlink -f "$DEV")" ]]; then
+      printf '%s' "$n"; return 0
+    fi
+  done
+}
+
+# update-initramfs finds the root's crypttab entry by the LIVE dm-crypt name under /
+# (jammy /lib/cryptsetup/functions: _foreach_cryptdev -> dmsetup unmangled_name ->
+# crypttab_find_entry). Unlock by hand as anything but the crypttab name - e.g.
+# `cryptsetup open /dev/nvme0n1p3 os-vg` at the (initramfs) prompt - and it prints
+# "target 'os-vg' not found in /etc/crypttab" and builds an initrd with NO unlock
+# entry at all. Renaming the open mapping is a name change only (same device number,
+# holders untouched), so it is safe with root mounted on it.
+fix_mapping() {
+  local live
+  [[ -n "$CT_NAME" ]] || return 0
+  live="$(live_name)"
+  if [[ -z "$live" ]]; then
+    y "  $DEV is not open (or dmsetup is missing) - nothing to match"
+    return 0
+  fi
+  if [[ "$live" == "$CT_NAME" ]]; then
+    g "  $DEV is open as $live, matching $CT"
+    return 0
+  fi
+  y "  $DEV is open as '$live' but $CT names it '$CT_NAME'."
+  y "  update-initramfs matches by the live name, so it would build an initrd that never unlocks $DEV."
+  if [[ -e "/dev/mapper/$CT_NAME" ]]; then
+    r "  /dev/mapper/$CT_NAME already exists - cannot rename $live to it"
+    return 1
+  fi
+  local direct=0
+  findmnt -rno SOURCE 2>/dev/null | grep -qxF "/dev/mapper/$live" && direct=1
+  run dmsetup rename "$live" "$CT_NAME" || return 1
+  [[ "$DRY" == 1 ]] || udevadm settle 2>/dev/null
+  [[ "$DRY" == 1 || "$(live_name)" == "$CT_NAME" ]] || { r "  rename did not take"; return 1; }
+  g "  renamed the open mapping $live -> $CT_NAME"
+  # A filesystem mounted straight off the mapping keeps the OLD path in /proc/mounts,
+  # and the hook resolves / through that path (stat -L). Point the old name at the
+  # renamed node until the initrd is rebuilt; drop_compat_link removes it.
+  if (( direct )); then
+    # absolute: /dev/mapper/NAME is a ../dm-N link under udev but a real node without it
+    run ln -sfn "$(readlink -f "/dev/mapper/$CT_NAME")" "/dev/mapper/$live" || return 1
+    COMPAT_LINK="/dev/mapper/$live"
+    y "  a filesystem is mounted directly on it: $COMPAT_LINK kept as a link until the initrd is built"
+  fi
+}
+
+drop_compat_link() {
+  [[ -n "${COMPAT_LINK:-}" && -L "$COMPAT_LINK" ]] && run rm -f "$COMPAT_LINK"
+  COMPAT_LINK=""
+}
+
 # ---------------------------------------------------------------- initrd check
 # update-initramfs exiting 0 is not proof: this checks what the next boot will actually
 # run. The initrd's cryptroot/crypttab must name $CT_NAME, and must not carry a keyscript
@@ -318,6 +378,13 @@ if [[ -n "$CT_LN" ]]; then
 else
   printf '  %-18s %s\n' "crypttab" "<no entry for $DEV>"
 fi
+LIVE="$(live_name)"
+if [[ -n "$LIVE" && -n "$CT_NAME" && "$LIVE" != "$CT_NAME" ]]; then
+  printf '  %-18s %s  <-- crypttab says %s: update-initramfs will build an initrd that cannot unlock\n' \
+    "open as" "$LIVE" "$CT_NAME"
+else
+  printf '  %-18s %s\n' "open as" "${LIVE:-<not open>}"
+fi
 if [[ -n "$CT_KS" ]] && ! stock_keyscript "$CT_KS"; then
   printf '  %-18s %s  <-- boot unlock depends on this script\n' "keyscript" "$CT_KS"
   if [[ "$LOCKAUTH" == 0 ]] && ks_is_tpm "$CT_KS"; then
@@ -396,12 +463,14 @@ if [[ "$LOCKAUTH" == "0" ]]; then
   # Always rebuilt: askpass only goes into the initrd once crypttab has no keyscript,
   # and the clevis hook only if clevis-initramfs is installed.
   b "2d. initramfs"
-  run update-initramfs -u -k all || die "update-initramfs failed - do NOT reboot until it succeeds"
+  ct_load
+  fix_mapping || die "the open mapping name does not match $CT - fix that before rebuilding the initrd"
+  run update-initramfs -u -k all || { drop_compat_link; die "update-initramfs failed - do NOT reboot until it succeeds"; }
+  drop_compat_link
   if [[ "$DRY" == 1 ]]; then
     printf '  DRY: would unpack each /boot/initrd.img-* and check its cryptroot/crypttab\n'
   else
-    ct_load
-    verify_initrds || die "the new initrd would not unlock $DEV - do NOT reboot. Your old crypttab is at ${CT_BAK:-$CT}."
+    verify_initrds || die "the new initrd would not unlock $DEV - do NOT reboot.${CT_BAK:+ Your old crypttab is at $CT_BAK.}"
   fi
 
   # The keyslot the keyscript's key opened is now unusable: the only copy was in the TPM.
@@ -505,11 +574,13 @@ restore_ct() {
   cp -p "$CT_BAK" "$CT" && update-initramfs -u -k all >/dev/null 2>&1
   y "  $CT restored from $CT_BAK"
 }
-run update-initramfs -u -k all || { restore_ct; die "update-initramfs failed - nothing queued"; }
+ct_load
+fix_mapping || { restore_ct; die "the open mapping name does not match $CT - nothing queued"; }
+run update-initramfs -u -k all || { drop_compat_link; restore_ct; die "update-initramfs failed - nothing queued"; }
+drop_compat_link
 if [[ "$DRY" == 1 ]]; then
   printf '  DRY: would unpack each /boot/initrd.img-* and check its cryptroot/crypttab\n'
 else
-  ct_load
   verify_initrds || { restore_ct; die "the new initrd would not unlock $DEV - nothing queued"; }
 fi
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # globals set here are read by the sourced tpmfix.sh functions
 # Function-level tests for ../tpmfix.sh: crypttab repair, keyscript slot discovery,
 # initrd verification. Real cryptsetup on a LUKS2 image, real unmkinitramfs on
 # jammy-shaped initrds (uncompressed early microcode cpio + zstd main cpio).
-# Needs NO TPM and no root. Needs: cryptsetup, cpio, zstd, unmkinitramfs, GNU stat.
-#   bash t/tpmfix-test.sh
+# Needs NO TPM. Needs: cryptsetup, cpio, zstd, unmkinitramfs, GNU stat.
+#   bash t/tpmfix-test.sh           # everything but the live-mapping rename
+#   sudo bash t/tpmfix-test.sh      # also opens real dm-crypt mappings and renames one
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
@@ -131,6 +133,45 @@ verify_initrd "$W/missing" >/dev/null 2>&1 && bad "missing rejected" || ok "miss
 CT_KS=decrypt_keyctl
 mkinitrd "$W/stock" "dm_crypt-0 UUID=$UUID_DEV none luks,keyscript=decrypt_keyctl" 1
 verify_initrd "$W/stock" >/dev/null 2>&1 && ok "kept stock keyscript passes" || bad "kept stock keyscript passes"
+
+# ---------------------------------------------------------------- live mapping rename
+# Root only: opens real dm-crypt mappings. Mirrors the field failure - the disk was
+# unlocked by hand as 'os-vg' while crypttab says 'dm_crypt-0', with a mounted
+# filesystem on top (root in the real case), and renamed while in use.
+if [[ $(id -u) -eq 0 ]]; then
+  A="tpmfixT-live-$$" B="tpmfixT-other-$$" C="tpmfixT-want-$$"
+  L1="$(losetup -f --show "$IMG")"
+  IMG2="$W/luks2.img"; truncate -s 40M "$IMG2"
+  cryptsetup luksFormat -q --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$IMG2" "$W/pw" >/dev/null 2>&1
+  L2="$(losetup -f --show "$IMG2")"
+  cryptsetup open --key-file "$W/pw" "$L1" "$A" && cryptsetup open --key-file "$W/pw" "$L2" "$B"
+  mkfs.ext4 -q "/dev/mapper/$A" && mkdir -p "$W/mnt" && mount "/dev/mapper/$A" "$W/mnt" && echo before > "$W/mnt/f"
+
+  DEV="$L1" DRY=0
+  eq "live name found" "$(live_name)" "$A"
+  CT_NAME="$B"
+  fix_mapping >/dev/null 2>&1 && bad "refuses rename onto an existing mapping" || ok "refuses rename onto an existing mapping"
+  eq "still original name" "$(live_name)" "$A"
+  CT_NAME="$C"
+  DRY=1 fix_mapping >/dev/null 2>&1
+  eq "DRY did not rename" "$(live_name)" "$A"
+  fix_mapping >/dev/null 2>&1 && ok "rename while mounted" || bad "rename while mounted"
+  eq "live name now crypttab name" "$(live_name)" "$C"
+  echo after >> "$W/mnt/f" && sync && ok "fs still writable after rename" || bad "fs still writable after rename"
+  # the kernel keeps the old source string; the hook stat -L's it, so it must resolve
+  eq "mount keeps old source" "$(findmnt -no SOURCE "$W/mnt")" "/dev/mapper/$A"
+  [[ -L "/dev/mapper/$A" ]] && ok "compat link made for direct mount" || bad "compat link made for direct mount"
+  eq "old path resolves to renamed node" "$(stat -L -c %t:%T "/dev/mapper/$A" 2>&1)" "$(stat -L -c %t:%T "/dev/mapper/$C")"
+  drop_compat_link
+  [[ -e "/dev/mapper/$A" ]] && bad "compat link dropped" || ok "compat link dropped"
+  msg="$(fix_mapping 2>&1)"; rc=$?
+  eq "matching is a no-op" "$rc" 0
+  [[ "$msg" == *matching* ]] && ok "matching reported" || bad "matching reported"
+
+  umount "$W/mnt"; cryptsetup close "$C"; cryptsetup close "$B"; losetup -d "$L1" "$L2"
+else
+  printf 'skip live mapping rename (needs root)\n'
+fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 (( fail == 0 ))
