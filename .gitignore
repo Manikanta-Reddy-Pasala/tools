@@ -6,6 +6,3 @@ tpm.txt
 logs/
 luks-header.img
 .DS_Store
-
-# test fixtures are source, keep them
-!tpm/t/fixtures/*.txt

@@ -20,8 +20,14 @@
 #
 # PHASE 1 verifies your LUKS passphrase, moves boot off any TPM keyscript, removes the
 # clevis bindings, and asks the firmware to clear the TPM on the next boot.
-# PHASE 2 makes sure boot can unlock without the old TPM key, sets lockoutRecovery=0,
-# and binds clevis sealed to PCR 7.
+# PHASE 2 makes sure boot can unlock without the old TPM key, sets the dictionary-attack
+# parameters (default 32 tries / 60s / 60s, same as provision.sh), and binds clevis
+# sealed to PCR 7.
+#
+# Settings (environment): MAXTRIES=32 RECOVERY_TIME=60 LOCKOUT_RECOVERY_TIME=60 PCR_IDS=7
+#   DEV=/dev/...  (default: the only crypto_LUKS partition)
+#
+# New machine with nothing sealed yet? Use provision.sh instead.
 #
 # Already cleared and every boot stops at (initramfs)? At that prompt:
 #   cryptsetup open /dev/nvme0n1p3 dm_crypt-0     (your LUKS partition; see blkid)
@@ -32,9 +38,9 @@ set -uo pipefail
 
 PCR_IDS="${PCR_IDS:-7}"
 PCR_BANK="${PCR_BANK:-sha256}"
-MAXTRIES="${MAXTRIES:-32}"
-INTERVAL="${INTERVAL:-7200}"
-RECOVERY="${RECOVERY:-0}"
+MAXTRIES="${MAXTRIES:-32}"                           # auth failures before lockout
+RECOVERY_TIME="${RECOVERY_TIME:-60}"                 # seconds until one failure is forgiven
+LOCKOUT_RECOVERY_TIME="${LOCKOUT_RECOVERY_TIME:-60}" # seconds before lockoutAuth may be retried
 DRY="${DRY:-0}"
 DEV="${DEV:-}"
 CT="${CRYPTTAB:-/etc/crypttab}"
@@ -416,9 +422,9 @@ if [[ "$LOCKAUTH" == "0" ]]; then
   (( rc == 2 )) && { y "  review that script yourself; leaving it in place"; FAILS=$((FAILS + 1)); }
 
   b "2b. dictionary-attack parameters"
-  if run tpm2_dictionarylockout -s -n "$MAXTRIES" -t "$INTERVAL" -l "$RECOVERY"; then
-    g "  maxTries=$MAXTRIES interval=${INTERVAL}s recovery=${RECOVERY}s"
-    [[ "$RECOVERY" == 0 ]] && g "  recovery=0 -> a power cycle always gets you out of a lockout"
+  if run tpm2_dictionarylockout --setup-parameters --max-tries="$MAXTRIES" \
+       --recovery-time="$RECOVERY_TIME" --lockout-recovery-time="$LOCKOUT_RECOVERY_TIME"; then
+    g "  maxTries=$MAXTRIES recovery=${RECOVERY_TIME}s lockoutRecovery=${LOCKOUT_RECOVERY_TIME}s"
   else
     r "  could not set DA params (lockoutAuthSet=0, so this should have worked)"
     FAILS=$((FAILS + 1))
@@ -460,6 +466,14 @@ if [[ "$LOCKAUTH" == "0" ]]; then
     unset PASS
   fi
 
+  # A tpm2 binding with no pcr_ids unseals in any boot state (or, sealed before the
+  # clear, never). Either way it goes - but only once a PCR-sealed slot is proven.
+  if [[ -n "$BOUND" && "$BOUND" != dry ]]; then
+    for s in $(slots | awk '$2 == "tpm2" && $3 !~ /pcr_ids/ { print $1 }'); do
+      run clevis luks unbind -d "$DEV" -s "$s" -f && y "  removed slot $s (tpm2 with no pcr_ids)"
+    done
+  fi
+
   # Always rebuilt: askpass only goes into the initrd once crypttab has no keyscript,
   # and the clevis hook only if clevis-initramfs is installed.
   b "2d. initramfs"
@@ -485,7 +499,7 @@ if [[ "$LOCKAUTH" == "0" ]]; then
   fi
 
   b "DONE"
-  g "boot unlock: cryptroot prompt${BOUND:+, answered by clevis (PCR $PCR_IDS)}; lockoutRecovery=${RECOVERY}s."
+  g "boot unlock: cryptroot prompt${BOUND:+, answered by clevis (PCR $PCR_IDS)}; lockoutRecovery=${LOCKOUT_RECOVERY_TIME}s."
   y "Reboot once at the machine to confirm. PCR 7 is the Secure Boot state: changing"
   y "Secure Boot or enrolling keys stops it unsealing, by design. Keep your passphrase."
   (( FAILS == 0 )) || { r "$FAILS step(s) above did not complete - boot still works with the passphrase."; exit 1; }
