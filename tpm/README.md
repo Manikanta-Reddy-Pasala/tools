@@ -60,19 +60,28 @@ unset LUKS_PASS
 
 What it does, in this order:
 
-1. Installs `tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs` if missing.
-2. **Lockout parameters** — `max-tries=32`, `recovery-time=60`, `lockout-recovery-time=60`.
-   Done first because the TPM only accepts them while `lockoutAuthSet` is `0`. If it is `1`
+1. Reads `/etc/crypttab` and the live dm name **first** and refuses to go on if they disagree —
+   installing `clevis-initramfs` in step 2 triggers `update-initramfs` by itself, which would
+   otherwise bake a broken initrd before any check ran. A non-stock `keyscript=` is called out here.
+2. Installs `tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs` if missing.
+3. **Lockout parameters** — `max-tries=32`, `recovery-time=60`, `lockout-recovery-time=60`.
+   Set before anything is sealed, because the TPM only accepts them while `lockoutAuthSet` is `0`. If it is `1`
    the script stops here, binds nothing, and tells you to run `tpmfix.sh`.
-3. **clevis bind** to the LUKS partition, sealed to **PCR 7** (Secure Boot state). Checks the
+4. **clevis bind** to the LUKS partition, sealed to **PCR 7** (Secure Boot state). Checks the
    passphrase opens the disk first. Keeps an existing PCR-7 slot if it already unseals.
-4. Proves the TPM actually releases the key (`clevis luks pass`).
-5. Removes old bindings with **no `pcr_ids`** — only after step 4 passed.
-6. `update-initramfs -u -k all`, then unpacks the new initrd and checks it contains the
-   unlock entry. Stops with `do NOT reboot` if not.
+5. Proves the TPM actually releases the key (`clevis luks pass`).
+6. Removes old bindings with **no `pcr_ids`** — only after step 5 passed.
+7. Warns if the clevis slot is the only keyslot left, or if a stale PCR-7 slot no longer unseals.
+8. `update-initramfs -u -k all`, then unpacks the initrd of **every installed kernel**
+   (`/boot/vmlinuz-*`, so `.old-dkms` leftovers are ignored) and checks each one carries the
+   unlock entry, with no keyscript the crypttab does not have. `do NOT reboot` if any fails.
 
-Ends with `DONE`. Reboot once at the machine to confirm the disk unlocks by itself.
-Safe to re-run: every step checks before it acts.
+**Prints nothing when it works.** Exit codes: `0` everything checked, `1` failed — do not
+reboot, `2` done but read the warnings on stderr, `3` bound and unsealed but no initrd could
+be verified. Anything printed is an error or a warning.
+Reboot once at the machine to confirm the disk unlocks by itself — never remotely, and keep the
+LUKS passphrase: after a BIOS or Secure Boot change the TPM will (correctly) refuse.
+Safe to re-run: every step checks before it acts. `--status` is the read-only report.
 
 ---
 
@@ -263,6 +272,7 @@ sudo cryptsetup luksKillSlot /dev/nvme0n1p3 <slot>
 Run on a Linux box, not on the NUC being fixed.
 
 ```bash
+bash t/provision-test.sh            # provision.sh crypttab/keyscript/getcap parsing (no root, no TPM)
 bash t/tpmfix-test.sh               # crypttab repair, keyslots, initrd checks (no root, no TPM)
 sudo bash t/tpmfix-test.sh          # + real dm-crypt mapping renamed while mounted
 sudo bash t/swtpm-e2e-test.sh       # provision.sh + tpmfix.sh phase 2 against a software TPM

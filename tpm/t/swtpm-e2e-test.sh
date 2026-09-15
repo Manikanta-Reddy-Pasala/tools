@@ -26,7 +26,7 @@ fi
 # ------------------------------------------------------------------ inside the container
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
-apt-get install -y -qq --no-install-recommends swtpm swtpm-tools tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs cryptsetup-bin >/dev/null 2>&1 \
+apt-get install -y -qq --no-install-recommends swtpm swtpm-tools tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs cryptsetup-bin dmsetup >/dev/null 2>&1 \
   || { echo "apt-get install failed"; exit 2; }
 dpkg -l tpm2-tools clevis swtpm | awk '/^ii/ { print "  " $2, $3 }'
 
@@ -85,8 +85,8 @@ clevis luks pass -d "$L" -s "$S" | cryptsetup open --test-passphrase "$L" --key-
 
 # ---- re-run: nothing added
 n="$(nslots "$L")"; out="$(prov "$L")"; rc=$?
-[[ $rc == 0 && "$(nslots "$L")" == "$n" && "$out" == *"already unseals"* ]] \
-  && ok "re-run: keeps the working slot, asks for nothing" || { bad "re-run: rc=$rc"; echo "$out"; }
+[[ $rc == 0 && "$(nslots "$L")" == "$n" && -z "$out" ]] \
+  && ok "re-run: keeps the working slot, asks for nothing, prints nothing" || { bad "re-run: rc=$rc"; echo "$out"; }
 
 # ---- PCR 7 changes: sealing is real
 tpm2_pcrextend 7:sha256=0000000000000000000000000000000000000000000000000000000000000001
@@ -121,8 +121,8 @@ start_tpm
 tpm2_dictionarylockout --setup-parameters --max-tries=32 --recovery-time=60 --lockout-recovery-time=60
 tpm2_changeauth -c l windowsSecret
 out="$(prov "$L4" LUKS_PASS=xxxxxx)"; rc=$?
-[[ $rc == 0 && "$out" == *"nothing needs changing"* ]] \
-  && ok "lockoutAuth set, values already right: proceeds" || { bad "values already right: rc=$rc"; echo "$out"; }
+[[ $rc == 0 && -z "$out" ]] \
+  && ok "lockoutAuth set, values already right: proceeds silently" || { bad "values already right: rc=$rc"; echo "$out"; }
 
 # ---- crypttab keyscript is called out; --status changes nothing
 L5="$(new_luks)"
