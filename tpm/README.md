@@ -49,7 +49,7 @@ then on the NUC: `cd /tmp && chmod +x provision.sh tpmfix.sh`.
 ## 2. Decide which script — always look first
 
 ```bash
-sudo ./provision.sh --status      # read-only, changes nothing
+sudo ./tpmfix.sh --status         # read-only, changes nothing (provision.sh takes no arguments)
 ```
 
 Read the `lockoutAuthSet` line:
@@ -61,18 +61,15 @@ Read the `lockoutAuthSet` line:
 
 Also look for these warnings in the same output:
 
-- `<-- NO pcr_ids` — a binding made with the old command. It unseals in any boot state. Both scripts replace it.
+- `<-- NO pcr_ids` — a binding made with the old command. It unseals in any boot state. `tpmfix.sh` removes it; `provision.sh` only adds a pinned slot beside it.
 - `crypttab unlocks through ... keyscript` — boot does **not** use clevis, and if that script ever fails there is no passphrase prompt. See [§7](#7-why-it-is-done-this-way).
 
 ---
 
 ## 3. New system (or `lockoutAuthSet` = 0) — `provision.sh`
 
-```bash
-sudo ./provision.sh                        # asks for the LUKS passphrase
-```
-
-Non-interactive (fleet automation) — keep the passphrase out of shell history:
+Five commands in a file. It prints nothing, checks nothing beyond what the commands
+themselves enforce, and exits non-zero the moment one of them fails.
 
 ```bash
 read -rs LUKS_PASS && export LUKS_PASS
@@ -80,31 +77,38 @@ sudo --preserve-env=LUKS_PASS ./provision.sh
 unset LUKS_PASS
 ```
 
-What it does, in this order:
+What it runs, in this order:
 
-1. Reads `/etc/crypttab` and the live dm name **first** and refuses to go on if they disagree —
-   an initrd built while they disagree has no unlock entry. A non-stock `keyscript=` is called
-   out here too.
-2. Checks the tools are present. **Nothing is installed** — these boxes are offline; a missing
-   package is named and the script stops (see Prerequisites).
-3. **Lockout parameters** — `max-tries=32`, `recovery-time=60`, `lockout-recovery-time=60`.
-   Set before anything is sealed, because the TPM only accepts them while `lockoutAuthSet` is `0`. If it is `1`
-   the script stops here, binds nothing, and tells you to run `tpmfix.sh`.
-4. **clevis bind** to the LUKS partition, sealed to **PCR 7** (Secure Boot state). Checks the
-   passphrase opens the disk first. Keeps an existing PCR-7 slot if it already unseals.
-5. Proves the TPM actually releases the key (`clevis luks pass`).
-6. Removes old bindings with **no `pcr_ids`** — only after step 5 passed.
-7. Warns if the clevis slot is the only keyslot left, or if a stale PCR-7 slot no longer unseals.
-8. `update-initramfs -u -k all`, then unpacks the initrd of **every installed kernel**
-   (`/boot/vmlinuz-*`, so `.old-dkms` leftovers are ignored) and checks each one carries the
-   unlock entry, with no keyscript the crypttab does not have. `do NOT reboot` if any fails.
+1. `tpm2_dictionarylockout --setup-parameters` — `max-tries=32`, `recovery-time=60`,
+   `lockout-recovery-time=60`. First, because the TPM only accepts them while
+   `lockoutAuthSet` is `0`. **If it is `1` this command fails and the script stops here
+   having bound nothing — run [`tpmfix.sh`](#4-already-configured-system-lockoutauthset--1).**
+2. `clevis luks bind … tpm2 '{"pcr_bank":"sha256","pcr_ids":"7"}'` — skipped when a pinned slot
+   already **unseals**, so re-running is safe and asks for nothing; a slot that exists but no
+   longer unseals (BIOS or Secure Boot changed) does not count and is re-bound beside. `pcr_ids`
+   is not optional: without it the key unseals in **any** boot state. Once the new slot is proven,
+   the slots that no longer unseal are unbound — left in place they would release the key again if
+   that old firmware state ever came back.
+3. `clevis luks pass` again — proves the TPM releases the key before a boot depends on it.
+4. `update-initramfs -u -k all` — every kernel, because one installed but not yet booted needs
+   the clevis hook too.
 
-**Prints nothing when it works.** Exit codes: `0` everything checked, `1` failed — do not
-reboot, `2` done but read the warnings on stderr, `3` bound and unsealed but no initrd could
-be verified. Anything printed is an error or a warning.
-Reboot once at the machine to confirm the disk unlocks by itself — never remotely, and keep the
-LUKS passphrase: after a BIOS or Secure Boot change the TPM will (correctly) refuse.
-Safe to re-run: every step checks before it acts. `--status` is the read-only report.
+`DEV` defaults to the only `crypto_LUKS` partition; on a box with more than one, `blkid` returns
+them all and the run fails — set `DEV` explicitly there. `MAXTRIES`, `RECOVERY_TIME`, `LOCKOUT_RECOVERY_TIME`, `PCR_IDS` and `PCR_BANK` override
+the values above.
+
+**What it deliberately does not do** — run `tpmfix.sh --status` (or the commands in
+[§6](#6-verify-after-the-reboot)) if you want any of it checked:
+
+- it does not look at `/etc/crypttab`, so a `keyscript=` entry or a live dm name that disagrees
+  with it is not caught — and either means the initrd cannot unlock the disk;
+- it does not unpack the new initrd, so `update-initramfs` returning 0 is all you know;
+- it does not remove a binding that has no `pcr_ids` (only stale PCR-pinned ones);
+- it says nothing on failure beyond the exit status. Re-run the failing command by hand to see
+  the error.
+
+Reboot once **at the machine**, never remotely, and keep the LUKS passphrase: after a BIOS or
+Secure Boot change the TPM will (correctly) refuse and boot will ask for it.
 
 ---
 
@@ -176,7 +180,7 @@ If you opened it under another name, `tpmfix.sh` renames it; by hand it is
 ## 6. Verify after the reboot
 
 ```bash
-sudo ./provision.sh --status
+sudo ./tpmfix.sh --status
 sudo tpm2_getcap properties-variable | grep -E 'lockoutAuthSet|inLockout|MAX_AUTH_FAIL|LOCKOUT_INTERVAL|LOCKOUT_RECOVERY'
 sudo clevis luks list -d /dev/nvme0n1p3            # expect "pcr_ids":"7"
 ```
@@ -197,7 +201,7 @@ Both scripts read the same environment variables:
 | `LOCKOUT_RECOVERY_TIME` | `60` | `--lockout-recovery-time` | Seconds before the lockout password may be tried again after a failure (`0` = only after a reboot) |
 | `PCR_IDS` | `7` | — | PCR the disk key is sealed to (7 = Secure Boot state) |
 | `DEV` | the only `crypto_LUKS` partition | — | LUKS partition, if there is more than one |
-| `LUKS_PASS` | prompt | — | `provision.sh` only: passphrase for non-interactive runs |
+| `LUKS_PASS` | — | — | `provision.sh`: **required**, it never prompts. `tpmfix.sh` still asks |
 | `DRY` | `0` | — | `tpmfix.sh` only: `1` prints changes instead of making them |
 
 Example: `sudo MAXTRIES=10 RECOVERY_TIME=120 ./provision.sh`
@@ -295,7 +299,6 @@ sudo cryptsetup luksKillSlot /dev/nvme0n1p3 <slot>
 Run on a Linux box, not on the NUC being fixed.
 
 ```bash
-bash t/provision-test.sh            # provision.sh crypttab/keyscript/getcap parsing (no root, no TPM)
 bash t/tpmfix-test.sh               # crypttab repair, keyslots, initrd checks (no root, no TPM)
 sudo bash t/tpmfix-test.sh          # + real dm-crypt mapping renamed while mounted
 sudo bash t/swtpm-e2e-test.sh       # provision.sh + tpmfix.sh phase 2 against a software TPM

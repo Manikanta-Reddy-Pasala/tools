@@ -61,11 +61,10 @@ new_luks() {  # prints a loop device holding a fresh LUKS2 volume, passphrase xx
   printf 'xxxxxx' | cryptsetup luksFormat -q --type luks2 --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "$img" --key-file=-
   losetup -f --show "$img"
 }
-prov() {  # prov DEV [VAR=value ...] [script args ...]
-  local dev="$1" a envs=() args=(); shift
-  for a in "$@"; do if [[ "$a" == *=* ]]; then envs+=("$a"); else args+=("$a"); fi; done
-  env NO_INITRAMFS=1 CRYPTTAB="$W/crypttab" DEV="$dev" "${envs[@]}" \
-    bash /w/provision.sh "${args[@]}" </dev/null 2>&1
+mkdir -p "$W/bin"; printf '#!/bin/sh\nexit 0\n' > "$W/bin/update-initramfs"; chmod +x "$W/bin/update-initramfs"
+prov() {  # prov DEV [VAR=value ...] - provision.sh takes no arguments
+  local dev="$1"; shift
+  env PATH="$W/bin:$PATH" DEV="$dev" "$@" bash /w/provision.sh </dev/null 2>&1
 }
 nslots() { clevis luks list -d "$1" 2>/dev/null | grep -c .; }
 da() { tpm2_getcap properties-variable | sed -n "s/^[[:space:]]*$1:[[:space:]]*//p"; }
@@ -74,7 +73,9 @@ da() { tpm2_getcap properties-variable | sed -n "s/^[[:space:]]*$1:[[:space:]]*/
 # ---- fresh TPM, fresh disk
 start_tpm; L="$(new_luks)"
 out="$(prov "$L" LUKS_PASS=xxxxxx)"; rc=$?
-[[ $rc == 0 ]] && ok "fresh: exits 0" || { bad "fresh: rc=$rc"; echo "$out"; }
+# provision.sh itself prints nothing; clevis's own entropy warning on swtpm is not ours
+own="$(grep -v '^Warning: Value .* entropy range' <<<"$out")"
+[[ $rc == 0 && -z "$own" ]] && ok "fresh: exits 0, prints nothing of its own" || { bad "fresh: rc=$rc"; echo "$out"; }
 [[ "$(da TPM2_PT_MAX_AUTH_FAIL)" == 0x20 ]]    && ok "fresh: maxTries 32"          || bad "maxTries $(da TPM2_PT_MAX_AUTH_FAIL)"
 [[ "$(da TPM2_PT_LOCKOUT_INTERVAL)" == 0x3C ]] && ok "fresh: recovery 60s"         || bad "interval"
 [[ "$(da TPM2_PT_LOCKOUT_RECOVERY)" == 0x3C ]] && ok "fresh: lockoutRecovery 60s"  || bad "lockout recovery"
@@ -83,73 +84,61 @@ S="$(clevis luks list -d "$L" | awk -F: '/pcr_ids/ { print $1 }')"
 clevis luks pass -d "$L" -s "$S" | cryptsetup open --test-passphrase "$L" --key-file=- \
   && ok "fresh: TPM-released key opens the volume" || bad "released key does not open the volume"
 
-# ---- re-run: nothing added
+# ---- re-run without a passphrase: nothing added, nothing asked
 n="$(nslots "$L")"; out="$(prov "$L")"; rc=$?
 [[ $rc == 0 && "$(nslots "$L")" == "$n" && -z "$out" ]] \
-  && ok "re-run: keeps the working slot, asks for nothing, prints nothing" || { bad "re-run: rc=$rc"; echo "$out"; }
+  && ok "re-run: keeps the slot, asks for nothing, prints nothing" || { bad "re-run: rc=$rc"; echo "$out"; }
 
 # ---- PCR 7 changes: sealing is real
 tpm2_pcrextend 7:sha256=0000000000000000000000000000000000000000000000000000000000000001
 clevis luks pass -d "$L" -s "$S" >/dev/null 2>&1 && bad "PCR 7 change still unseals" || ok "PCR 7 change blocks unseal"
 
-# ---- the old command's binding (no pcr_ids) is replaced
+# ---- a slot that exists but no longer unseals must not count as bound
+out="$(prov "$L" LUKS_PASS=xxxxxx)"; rc=$?
+[[ $rc == 0 ]] && ok "stale slot: re-binds against the new PCR state" || { bad "stale slot: rc=$rc"; echo "$out"; }
+np="$(clevis luks list -d "$L" | grep -c '"pcr_ids":"7"')"
+[[ "$np" == 1 ]] && ok "stale slot: the dead slot was removed, exactly one pinned slot left" \
+  || bad "stale slot: $np pinned slots"
+S3="$(clevis luks list -d "$L" | awk -F: '/pcr_ids/ { print $1 }')"
+clevis luks pass -d "$L" -s "$S3" >/dev/null 2>&1 \
+  && ok "stale slot: the new slot unseals" || bad "stale slot: nothing unseals"
+
+# ---- takes no arguments: anything on the command line must not provision
+out="$(env DEV="$L" bash /w/provision.sh --status 2>&1)"; rc=$?
+[[ $rc == 64 && -z "$out" ]] && ok "arguments: refused, nothing done" || { bad "arguments: rc=$rc"; echo "$out"; }
+
+# ---- a binding with no pcr_ids does not count as bound: a pinned slot is added beside it
 L2="$(new_luks)"
 echo -e "xxxxxx" | clevis luks bind -d "$L2" tpm2 '{"pcr_bank":"sha256"}' >/dev/null 2>&1
 out="$(prov "$L2" LUKS_PASS=xxxxxx)"; rc=$?
 [[ $rc == 0 ]] && ok "old binding: exits 0" || { bad "old binding: rc=$rc"; echo "$out"; }
-clevis luks list -d "$L2" | grep -q "tpm2 '{\"pcr_bank\":\"sha256\"}'" && bad "unpinned slot left" || ok "old binding: unpinned slot removed"
-clevis luks list -d "$L2" | grep -q '"pcr_ids":"7"' && ok "old binding: pinned slot present" || bad "old binding: no pinned slot"
+clevis luks list -d "$L2" | grep -q '"pcr_ids":"7"' && ok "old binding: pinned slot added" || bad "old binding: no pinned slot"
 printf 'xxxxxx' | cryptsetup open --test-passphrase "$L2" --key-file=- && ok "old binding: passphrase still opens" || bad "passphrase lost"
 
-# ---- wrong passphrase: nothing bound
+# ---- wrong passphrase: fails, nothing bound
 L3="$(new_luks)"
 out="$(prov "$L3" LUKS_PASS=wrong)"; rc=$?
-[[ $rc != 0 && "$out" == *"does not open"* && "$(nslots "$L3")" == 0 ]] \
-  && ok "wrong passphrase: refused, nothing bound" || { bad "wrong passphrase: rc=$rc"; echo "$out"; }
+[[ $rc != 0 && "$(nslots "$L3")" == 0 ]] \
+  && ok "wrong passphrase: fails, nothing bound" || { bad "wrong passphrase: rc=$rc"; echo "$out"; }
 
-# ---- lockoutAuth set (what Windows leaves) with other DA values: stops before binding
+# ---- lockoutAuth set (what Windows leaves): the DA write fails, so nothing is bound
 start_tpm
 tpm2_changeauth -c l windowsSecret
 L4="$(new_luks)"
 out="$(prov "$L4" LUKS_PASS=xxxxxx)"; rc=$?
-[[ $rc != 0 && "$out" == *"lockoutAuth is already set"* && "$out" == *tpmfix.sh* ]] \
-  && ok "lockoutAuth set: refuses and points at tpmfix.sh" || { bad "lockoutAuth set: rc=$rc"; echo "$out"; }
+[[ $rc != 0 ]] && ok "lockoutAuth set: fails (run tpmfix.sh)" || { bad "lockoutAuth set: rc=$rc"; echo "$out"; }
 [[ "$(nslots "$L4")" == 0 ]] && ok "lockoutAuth set: nothing bound" || bad "lockoutAuth set: bound anyway"
 
-# ---- lockoutAuth set AFTER our values were applied: nothing to change, carries on
-start_tpm
-tpm2_dictionarylockout --setup-parameters --max-tries=32 --recovery-time=60 --lockout-recovery-time=60
-tpm2_changeauth -c l windowsSecret
-out="$(prov "$L4" LUKS_PASS=xxxxxx)"; rc=$?
-[[ $rc == 0 && -z "$out" ]] \
-  && ok "lockoutAuth set, values already right: proceeds silently" || { bad "values already right: rc=$rc"; echo "$out"; }
-
-# ---- crypttab keyscript is called out; --status changes nothing
-L5="$(new_luks)"
-printf 'dm_crypt-0 UUID=%s none luks,keyscript=/usr/local/sbin/tpm2-getkey\n' "$(blkid -s UUID -o value "$L5")" > "$W/crypttab"
-out="$(prov "$L5" --status)"; rc=$?
-[[ $rc == 0 && "$out" == *"NO passphrase prompt"* ]] && ok "--status: keyscript warning" || { bad "--status: rc=$rc"; echo "$out"; }
-[[ "$(nslots "$L5")" == 0 ]] && ok "--status: nothing bound" || bad "--status bound something"
-
-# ---- offline box: a missing tool is NAMED and nothing is touched (no apt anywhere)
-L7="$(new_luks)"
+# ---- offline box, clevis missing: fails, binds nothing, installs nothing
+start_tpm; L7="$(new_luks)"
 mkdir -p "$W/nobin"
-# everything both scripts need EXCEPT clevis - keep in step with the need= lists in provision.sh
-for t in bash id mktemp blkid grep sed awk head wc readlink find dmsetup findmnt cryptsetup \
-         tpm2_getcap tpm2_dictionarylockout tail rm cat date tr sort comm; do
+for t in bash id blkid grep sed awk head cut printf cryptsetup tpm2_getcap tpm2_dictionarylockout; do
   p="$(command -v "$t")" && ln -sf "$p" "$W/nobin/$t"
-done   # everything provision.sh needs EXCEPT clevis
-out="$(env PATH="$W/nobin" NO_INITRAMFS=1 CRYPTTAB="$W/crypttab" DEV="$L7" LUKS_PASS=xxxxxx \
-  bash /w/provision.sh 2>&1)"; rc=$?
-[[ $rc != 0 && "$out" == *"missing on this box: clevis clevis-luks-bind"* && "$out" == *offline* ]] \
-  && ok "offline: missing clevis is named, not installed" || { bad "offline: rc=$rc"; echo "$out"; }
-[[ "$(nslots "$L7")" == 0 ]] && ok "offline: nothing bound when a tool is missing" || bad "offline: bound anyway"
-# --status must still report on a box that is missing packages, never abort
-out="$(env PATH="$W/nobin" CRYPTTAB="$W/crypttab" DEV="$L7" bash /w/provision.sh --status 2>&1)"; rc=$?
-[[ $rc == 0 && "$out" == *"device=$L7"* ]] \
-  && ok "offline: provision.sh --status reports without clevis" || { bad "offline --status: rc=$rc"; echo "$out"; }
-out="$(env PATH="$W/nobin" CRYPTTAB="$W/crypttab" DEV="$L7" STATE="$W/state" bash /w/tpmfix.sh --status 2>&1)"; rc=$?
-[[ $rc == 0 ]] && ok "offline: tpmfix.sh --status reports without clevis" || { bad "offline tpmfix --status: rc=$rc"; echo "$out"; }
+done   # everything provision.sh runs EXCEPT clevis
+ln -sf "$W/bin/update-initramfs" "$W/nobin/update-initramfs"
+out="$(env PATH="$W/nobin" DEV="$L7" LUKS_PASS=xxxxxx bash /w/provision.sh 2>&1)"; rc=$?
+[[ $rc != 0 && "$(nslots "$L7")" == 0 ]] \
+  && ok "offline: missing clevis fails, nothing bound" || { bad "offline: rc=$rc"; echo "$out"; }
 
 # ---- tpmfix.sh phase 2 (lockoutAuthSet=0): already configured with the old command
 # update-initramfs is faked - there is no kernel in the container; the initrd check is
