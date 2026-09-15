@@ -4,15 +4,16 @@
 #   sudo ./provision.sh --status        # read-only, changes nothing
 #   read -rs LUKS_PASS && export LUKS_PASS && sudo --preserve-env=LUKS_PASS ./provision.sh
 #     ^ the non-interactive form. Never put the passphrase in argv: sudo logs it and ps shows it.
-# Order matters: read-only checks first (a wrong crypttab makes everything below useless, and
-# the apt install below triggers update-initramfs on its own), then DA params - the TPM accepts
-# those only while lockoutAuth is empty - then clevis sealed to PCR 7, proof it unseals, drop
-# unpinned slots, verify every initrd.
+# Order matters: read-only checks first (a wrong crypttab makes everything below useless),
+# then DA params - the TPM accepts those only while lockoutAuth is empty - then clevis sealed
+# to PCR 7, proof it unseals, drop unpinned slots, verify every initrd.
 # Silent on success; anything printed is an error or a warning. Re-running is safe.
 # Exit: 0 all checks passed - 1 failed, do not reboot - 2 done, but read the warnings
 #       3 bound and unsealed, but no initrd could be verified (NO_INITRAMFS=1 is your own choice: 0)
+# Offline tool: it installs nothing. Everything it needs must already be in the image -
+# tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs cryptsetup-bin dmsetup initramfs-tools.
 # Env: MAXTRIES RECOVERY_TIME LOCKOUT_RECOVERY_TIME PCR_IDS PCR_BANK DEV CRYPTTAB
-#      SKIP_APT NO_INITRAMFS LUKS_PASS
+#      NO_INITRAMFS LUKS_PASS
 set -uo pipefail
 
 MAXTRIES="${MAXTRIES:-32}"
@@ -88,14 +89,32 @@ case "${1:-}" in
 esac
 [[ $(id -u) -eq 0 ]] || die "run as root"
 
-# ---- read-only discovery. Before apt, because installing clevis-initramfs rebuilds the initrd.
+# ---- tools. This box is offline: nothing is installed here, it is only checked for.
+# --status skips the gate on purpose: it must still report on a box that is missing packages.
+if (( STATUS == 0 )); then
+  need=()
+  for c in tpm2_getcap tpm2_dictionarylockout clevis clevis-luks-bind clevis-encrypt-tpm2 \
+           cryptsetup blkid dmsetup awk find sed grep; do
+    command -v "$c" >/dev/null || need+=("$c")
+  done
+  # required even under NO_INITRAMFS=1: without the hook no initrd can ever answer the prompt
+  [[ -e /usr/share/initramfs-tools/hooks/clevis ]] || need+=("the clevis initramfs hook")
+  if [[ "${NO_INITRAMFS:-0}" != 1 ]]; then
+    command -v update-initramfs >/dev/null || need+=(update-initramfs)
+    command -v unmkinitramfs >/dev/null || need+=(unmkinitramfs)
+  fi
+  if (( ${#need[@]} )); then
+    die "missing on this box: ${need[*]} - nothing can be installed offline, so bake tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs cryptsetup-bin util-linux dmsetup initramfs-tools into the image first"
+  fi
+fi
+
+# ---- read-only discovery, before anything writes to the TPM, the LUKS header or /boot
 if [[ -z "$DEV" ]]; then
   DEV="$(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null)"
   [[ -n "$DEV" ]] || die "no LUKS partition found"
   [[ "$(wc -l <<<"$DEV")" -eq 1 ]] || die "more than one LUKS partition - re-run with DEV=/dev/..."
 fi
 ct_scan; LIVE="$(live_name)"
-command -v dmsetup >/dev/null || warn "WARNING: dmsetup missing - cannot check the live mapping name"
 [[ -n "$KS" ]] && warn "WARNING: $CT unlocks '$NAME' through $KS, not clevis. If that key ever fails there is NO passphrase prompt - boot stops at (initramfs). Fix it with ./tpmfix.sh"
 
 if (( STATUS == 1 )); then   # report and exit; never abort, the box may not be provisioned yet
@@ -113,6 +132,8 @@ if (( STATUS == 1 )); then   # report and exit; never abort, the box may not be 
   else
     warn "WARNING: no tpm2-tools or no /dev/tpmrm0 (enable Intel PTT in the BIOS) - TPM state not read"
   fi
+  command -v dmsetup >/dev/null || warn "WARNING: dmsetup missing - 'open_as' above is not trustworthy"
+  command -v clevis >/dev/null || warn "WARNING: clevis missing - no slot list below means UNKNOWN, not none"
   command -v clevis >/dev/null && slots | while read -r s pin cfg; do
     [[ "$pin" == tpm2 && "$cfg" != *pcr_ids* ]] && cfg="$cfg  <-- no pcr_ids: unseals in any boot state"
     printf 'slot %s %s %s\n' "$s" "$pin" "$cfg"
@@ -121,15 +142,6 @@ if (( STATUS == 1 )); then   # report and exit; never abort, the box may not be 
 fi
 [[ -z "$LIVE" || -z "$NAME" || "$LIVE" == "$NAME" ]] || die "$DEV is open as '$LIVE' but $CT says '$NAME'; any initrd built now would have no unlock entry. Fix first: dmsetup rename $LIVE $NAME"
 
-# ---- tools
-if [[ "${SKIP_APT:-0}" != 1 && "$STATUS" != 1 ]] && { ! command -v tpm2_getcap >/dev/null \
-   || ! command -v clevis-luks-bind >/dev/null || [[ ! -e /usr/share/initramfs-tools/hooks/clevis ]]; }; then
-  DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tpm2-tools clevis clevis-luks clevis-tpm2 \
-    clevis-initramfs >/dev/null 2>&1 || die "apt-get install failed"
-fi
-command -v tpm2_getcap >/dev/null || die "tpm2-tools missing"
-command -v clevis >/dev/null || die "clevis missing"
 [[ -c /dev/tpmrm0 ]] || die "no /dev/tpmrm0 - enable Intel PTT in the BIOS"
 export TPM2TOOLS_TCTI="device:/dev/tpmrm0"   # jammy clevis globs /dev/tpmrm? regardless; match it
 VC="$(tpm2_getcap properties-variable 2>/dev/null)" || die "tpm2_getcap failed"
@@ -183,7 +195,7 @@ done
 [[ "${NO_INITRAMFS:-0}" == 1 ]] && { (( WARNED )) && exit 2; exit 0; }
 update-initramfs -u -k all >/dev/null || die "update-initramfs failed - do NOT reboot"
 [[ -n "$NAME" ]] || { warn "WARNING: no $CT entry for $DEV - no initrd was verified"; exit 3; }
-command -v unmkinitramfs >/dev/null || { warn "WARNING: unmkinitramfs missing - no initrd was verified"; exit 3; }
+command -v unmkinitramfs >/dev/null || { warn "WARNING: unmkinitramfs missing - no initrd was verified"; exit 3; }   # NO_INITRAMFS=1 skips the gate above
 bad=0 seen=0
 for k in /boot/vmlinuz-*; do          # installed kernels only: initrd.img-* also matches .old-dkms
   [[ -f "$k" ]] || continue
@@ -202,7 +214,8 @@ for k in /boot/vmlinuz-*; do          # installed kernels only: initrd.img-* als
   elif [[ -z "$KS_ANY" && "$line" == *keyscript=* ]]; then   # $CT has none, the initrd invented one
     warn "WARNING: $IMG unlocks '$NAME' through a keyscript that $CT does not have"; bad=$((bad + 1)); continue
   fi
-  [[ -n "$hook" ]] || warn "WARNING: no clevis hook in $IMG - that kernel will ask for the passphrase"
+  [[ -n "$hook" ]] || { warn "WARNING: $IMG has no clevis hook although the hook file exists - that kernel cannot auto-unlock"
+    bad=$((bad + 1)); continue; }
   seen=$((seen + 1))
 done
 (( bad )) && die "$bad of $((bad + seen)) initrd images would not unlock '$NAME' - do NOT reboot"

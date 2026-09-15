@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# tpmfix.sh - one script, no dependencies on anything else.
+# tpmfix.sh - one script, no dependencies on anything else. It is an OFFLINE tool: it installs
+# nothing. tpm2-tools, cryptsetup-bin, clevis, clevis-luks, clevis-tpm2, clevis-initramfs and
+# initramfs-tools must already be in the image; it stops and names what is missing if not.
 #
 # Fixes three things on an Ubuntu 22.04 / Intel PTT box (ASUS NUC 15 Pro):
 #   1. lockoutAuthSet=1 with an unknown password, which blocks every attempt to set
@@ -17,6 +19,7 @@
 #   sudo ./tpmfix.sh              # act (asks for typed confirmation before a clear)
 #   sudo ./tpmfix.sh --status     # read-only, changes nothing
 #   sudo DRY=1 ./tpmfix.sh        # print every change instead of making it
+#   sudo ALLOW_NO_CLEVIS=1 ./tpmfix.sh   # box has no clevis: repair boot only, no auto-unlock
 #
 # PHASE 1 verifies your LUKS passphrase, moves boot off any TPM keyscript, removes the
 # clevis bindings, and asks the firmware to clear the TPM on the next boot.
@@ -301,7 +304,11 @@ verify_initrd() {
     g "  $img: $line"
   fi
   if ! find "$tmp" -path '*/scripts/local-top/clevis' 2>/dev/null | grep -q .; then
-    y "  $img: no clevis hook - boot will ask for the passphrase (no auto-unlock)"
+    if [[ -n "$(slots | awk '$2 == "tpm2" { print $1 }')" ]]; then
+      r "  $img: no clevis hook, but $DEV has a tpm2 binding - that kernel cannot auto-unlock"; rc=1
+    else
+      y "  $img: no clevis hook - boot will ask for the passphrase (no auto-unlock)"
+    fi
   fi
   rm -rf "$tmp"
   return "$rc"
@@ -321,15 +328,16 @@ verify_initrds() {
   (( fails == 0 ))
 }
 
+# Offline box: nothing is installed here, it is only checked for.
 need_clevis() {
-  if command -v clevis >/dev/null && command -v clevis-luks-bind >/dev/null \
-     && [[ -e /usr/share/initramfs-tools/hooks/clevis ]]; then
-    return 0
-  fi
-  y "  installing clevis clevis-luks clevis-tpm2 clevis-initramfs"
-  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    clevis clevis-luks clevis-tpm2 clevis-initramfs || return 1
-  [[ "$DRY" == 1 ]] || command -v clevis >/dev/null
+  local miss=()
+  command -v clevis >/dev/null || miss+=(clevis)
+  command -v clevis-luks-bind >/dev/null || miss+=(clevis-luks)
+  command -v clevis-encrypt-tpm2 >/dev/null || miss+=(clevis-tpm2)
+  [[ -e /usr/share/initramfs-tools/hooks/clevis ]] || miss+=(clevis-initramfs)
+  if (( ${#miss[@]} == 0 )); then return 0; fi
+  r "  missing and NOT installable offline: ${miss[*]} - bake clevis clevis-luks clevis-tpm2 clevis-initramfs into the image"
+  return 1
 }
 
 # Sourcing with TPMFIX_LIB=1 loads the functions above without running anything (tests).
@@ -342,12 +350,21 @@ STATUS_ONLY=0
 [[ $(id -u) -eq 0 ]] || die "run as root: sudo $0 $*"
 
 # ---------------------------------------------------------------- discover
-command -v tpm2_getcap >/dev/null || {
-  y "installing tpm2-tools + cryptsetup"
-  run env DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tpm2-tools cryptsetup-bin
-  command -v tpm2_getcap >/dev/null || die "tpm2-tools still missing"
-}
+need=()
+for c in tpm2_getcap cryptsetup blkid awk; do command -v "$c" >/dev/null || need+=("$c"); done
+if (( STATUS_ONLY == 0 )); then   # --status must still report on a box that is missing packages
+  for c in tpm2_dictionarylockout dmsetup findmnt find update-initramfs unmkinitramfs; do
+    command -v "$c" >/dev/null || need+=("$c")
+  done
+fi
+if (( ${#need[@]} )); then
+  die "missing on this box: ${need[*]} - nothing can be installed offline, so bake tpm2-tools cryptsetup-bin util-linux dmsetup initramfs-tools into the image first"
+fi
+# clevis is what restores auto-unlock after the clear. Without it phase 1 destroys the TPM key
+# and nothing can rebind - so say so BEFORE anything is queued, not after the reboot.
+if (( STATUS_ONLY == 0 )) && ! need_clevis && [[ "${ALLOW_NO_CLEVIS:-0}" != 1 ]]; then
+  die "a TPM clear would leave this box with no auto-unlock and no way to restore it offline. Run with ALLOW_NO_CLEVIS=1 if you only want the crypttab/boot repair (you will type the passphrase at every boot)"
+fi
 if [[ -c /dev/tpmrm0 ]]; then export TPM2TOOLS_TCTI="device:/dev/tpmrm0"
 elif [[ -c /dev/tpm0 ]]; then export TPM2TOOLS_TCTI="device:/dev/tpm0"
 else die "no /dev/tpm* - TPM/PTT disabled in BIOS?"; fi
@@ -394,7 +411,8 @@ fi
 if [[ -n "$CT_KS" ]] && ! stock_keyscript "$CT_KS"; then
   printf '  %-18s %s  <-- boot unlock depends on this script\n' "keyscript" "$CT_KS"
   if [[ "$LOCKAUTH" == 0 ]] && ks_is_tpm "$CT_KS"; then
-    r "  TPM is cleared and boot still uses a TPM keyscript: every boot will stop at (initramfs)."
+    r "  TPM has no lockout password (cleared, or never set) and boot uses a TPM keyscript:"
+    r "  if that key was lost with a clear, every boot stops at (initramfs)."
     r "  Run this script without --status to repair it."
   fi
 fi
@@ -414,6 +432,8 @@ done < <(slots)
 if [[ "$LOCKAUTH" == "0" ]]; then
   b "PHASE 2 - TPM is cleared, finishing up"
   FAILS=0
+
+  need_clevis || { r "  clevis is missing: this run can only leave you with a passphrase prompt"; FAILS=$((FAILS + 1)); }
 
   # First, because it is the one that decides whether the machine boots.
   b "2a. boot unlock path ($CT)"
@@ -440,7 +460,7 @@ if [[ "$LOCKAUTH" == "0" ]]; then
   if [[ -n "$BOUND" ]]; then
     g "  slot $BOUND already unseals against the current PCR $PCR_IDS state - keeping it"
   elif ! need_clevis; then
-    r "  clevis could not be installed - boot will ask for the passphrase every time"
+    r "  so boot will ask for the passphrase every time"
     FAILS=$((FAILS + 1))
   else
     printf 'existing LUKS passphrase for %s: ' "$DEV" >&2

@@ -64,7 +64,7 @@ new_luks() {  # prints a loop device holding a fresh LUKS2 volume, passphrase xx
 prov() {  # prov DEV [VAR=value ...] [script args ...]
   local dev="$1" a envs=() args=(); shift
   for a in "$@"; do if [[ "$a" == *=* ]]; then envs+=("$a"); else args+=("$a"); fi; done
-  env SKIP_APT=1 NO_INITRAMFS=1 CRYPTTAB="$W/crypttab" DEV="$dev" "${envs[@]}" \
+  env NO_INITRAMFS=1 CRYPTTAB="$W/crypttab" DEV="$dev" "${envs[@]}" \
     bash /w/provision.sh "${args[@]}" </dev/null 2>&1
 }
 nslots() { clevis luks list -d "$1" 2>/dev/null | grep -c .; }
@@ -130,6 +130,26 @@ printf 'dm_crypt-0 UUID=%s none luks,keyscript=/usr/local/sbin/tpm2-getkey\n' "$
 out="$(prov "$L5" --status)"; rc=$?
 [[ $rc == 0 && "$out" == *"NO passphrase prompt"* ]] && ok "--status: keyscript warning" || { bad "--status: rc=$rc"; echo "$out"; }
 [[ "$(nslots "$L5")" == 0 ]] && ok "--status: nothing bound" || bad "--status bound something"
+
+# ---- offline box: a missing tool is NAMED and nothing is touched (no apt anywhere)
+L7="$(new_luks)"
+mkdir -p "$W/nobin"
+# everything both scripts need EXCEPT clevis - keep in step with the need= lists in provision.sh
+for t in bash id mktemp blkid grep sed awk head wc readlink find dmsetup findmnt cryptsetup \
+         tpm2_getcap tpm2_dictionarylockout tail rm cat date tr sort comm; do
+  p="$(command -v "$t")" && ln -sf "$p" "$W/nobin/$t"
+done   # everything provision.sh needs EXCEPT clevis
+out="$(env PATH="$W/nobin" NO_INITRAMFS=1 CRYPTTAB="$W/crypttab" DEV="$L7" LUKS_PASS=xxxxxx \
+  bash /w/provision.sh 2>&1)"; rc=$?
+[[ $rc != 0 && "$out" == *"missing on this box: clevis clevis-luks-bind"* && "$out" == *offline* ]] \
+  && ok "offline: missing clevis is named, not installed" || { bad "offline: rc=$rc"; echo "$out"; }
+[[ "$(nslots "$L7")" == 0 ]] && ok "offline: nothing bound when a tool is missing" || bad "offline: bound anyway"
+# --status must still report on a box that is missing packages, never abort
+out="$(env PATH="$W/nobin" CRYPTTAB="$W/crypttab" DEV="$L7" bash /w/provision.sh --status 2>&1)"; rc=$?
+[[ $rc == 0 && "$out" == *"device=$L7"* ]] \
+  && ok "offline: provision.sh --status reports without clevis" || { bad "offline --status: rc=$rc"; echo "$out"; }
+out="$(env PATH="$W/nobin" CRYPTTAB="$W/crypttab" DEV="$L7" STATE="$W/state" bash /w/tpmfix.sh --status 2>&1)"; rc=$?
+[[ $rc == 0 ]] && ok "offline: tpmfix.sh --status reports without clevis" || { bad "offline tpmfix --status: rc=$rc"; echo "$out"; }
 
 # ---- tpmfix.sh phase 2 (lockoutAuthSet=0): already configured with the old command
 # update-initramfs is faked - there is no kernel in the container; the initrd check is

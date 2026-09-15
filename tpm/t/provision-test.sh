@@ -80,5 +80,13 @@ eq "live_name: unparseable status is not a match" "$(live_name)" ""
 probe() { read -r x; [[ "$x" == "pw" ]]; }
 try2 probe "pw" && ok "try2: passphrase with no trailing newline" || bad "try2" "fail" "pass"
 
+# offline tool: neither script may reach for the network or a package manager
+for f in "$SRC" "$HERE/../tpmfix.sh"; do
+  pat='^[^#]*\b(apt|apt-get|aptitude|dpkg|snap|pip3?|curl|wget|nc|ssh|scp|rsync)\b'
+  if grep -qE "$pat" "$f"; then
+    bad "offline: $(basename "$f") must not install or fetch anything" "$(grep -nE "$pat" "$f" | head -n1)" ""
+  else ok "offline: no installer or fetch in $(basename "$f")"; fi
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 (( fail == 0 ))

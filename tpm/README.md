@@ -11,18 +11,40 @@ NUC and on one that is **already configured**. Two scripts do all of it:
 Target: Ubuntu 22.04, Intel PTT firmware TPM (ASUS NUC 15 Pro). Both scripts are single
 files with no dependencies on each other or on anything else in this repo.
 
+**These are offline tools. Neither script installs anything** — no `apt-get`, no network.
+Everything they need must already be in the image; a missing piece is named and the run stops.
+
+### Prerequisites — bake into the image
+
+```
+tpm2-tools  cryptsetup-bin  util-linux  dmsetup  initramfs-tools
+clevis  clevis-luks  clevis-tpm2  clevis-initramfs
+```
+
+Check a box in one line (every one of these must print a path, and the hook must exist):
+
+```bash
+for c in tpm2_getcap tpm2_dictionarylockout clevis clevis-luks-bind clevis-encrypt-tpm2 \
+         cryptsetup blkid dmsetup findmnt awk find update-initramfs unmkinitramfs; do
+  command -v "$c" >/dev/null || echo "MISSING: $c"
+done
+[ -e /usr/share/initramfs-tools/hooks/clevis ] || echo "MISSING: clevis-initramfs hook"
+```
+
+Silence means the box is ready. (`command -v a b c` is no good here — it exits 0 while a name
+in the middle is missing.)
+
 ---
 
 ## 1. Get the scripts onto the box
 
+The box has no network, so copy them across — `scp` from a jump host, or a USB stick:
+
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/Manikanta-Reddy-Pasala/tools/main/tpm/provision.sh
-curl -fsSLO https://raw.githubusercontent.com/Manikanta-Reddy-Pasala/tools/main/tpm/tpmfix.sh
-chmod +x provision.sh tpmfix.sh
+scp provision.sh tpmfix.sh user@nuc:/tmp/      # from a machine that does have the repo
 ```
 
-If the repo is private: `git clone https://github.com/Manikanta-Reddy-Pasala/tools.git && cd tools/tpm`,
-or `scp` the two files across.
+then on the NUC: `cd /tmp && chmod +x provision.sh tpmfix.sh`.
 
 ## 2. Decide which script — always look first
 
@@ -61,9 +83,10 @@ unset LUKS_PASS
 What it does, in this order:
 
 1. Reads `/etc/crypttab` and the live dm name **first** and refuses to go on if they disagree —
-   installing `clevis-initramfs` in step 2 triggers `update-initramfs` by itself, which would
-   otherwise bake a broken initrd before any check ran. A non-stock `keyscript=` is called out here.
-2. Installs `tpm2-tools clevis clevis-luks clevis-tpm2 clevis-initramfs` if missing.
+   an initrd built while they disagree has no unlock entry. A non-stock `keyscript=` is called
+   out here too.
+2. Checks the tools are present. **Nothing is installed** — these boxes are offline; a missing
+   package is named and the script stops (see Prerequisites).
 3. **Lockout parameters** — `max-tries=32`, `recovery-time=60`, `lockout-recovery-time=60`.
    Set before anything is sealed, because the TPM only accepts them while `lockoutAuthSet` is `0`. If it is `1`
    the script stops here, binds nothing, and tells you to run `tpmfix.sh`.
