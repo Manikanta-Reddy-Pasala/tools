@@ -32,6 +32,9 @@ Facts behind those choices:
   loads it under a primary key created with default attributes, and that primary is **not**
   `noda` (jammy `clevis-tpm2_18`). While the TPM is in lockout, that load fails. Boot then falls
   back to the passphrase. Clear the lockout with `tpm2_dictionarylockout --clear-lockout`.
+  Proven on swtpm with jammy tpm2-tools: in lockout `tpm2_load` fails with "not allowed … DA
+  lockout mode"; after `--clear-lockout` the same load and unseal succeed. (Windows BitLocker
+  doesn't hit this because its storage key is `noda`.)
 - **Power cuts count.** Every boot unlock uses that DA-protected key, so an unclean shutdown
   adds a failure. Use clean shutdowns where possible; 32 tries with 60 s recovery covers the
   rest.
@@ -47,6 +50,30 @@ Facts behind those choices:
     persistent objects and NV indices;
   - resets the lockout parameters to vendor defaults;
   - leaves the endorsement seed unchanged, so the same EK can be recreated.
+
+### Common TPM 2.0 guidance, checked against this setup
+
+| Guidance | Verdict | For us |
+|---|---|---|
+| Set owner, lockout and endorsement passwords to high-entropy values and keep them in a vault. | **Partly wrong** | **Owner password: never set it.** It breaks clevis bind and unlock. Lockout password: fine if it is **unique per box** and vaulted, never one value for the fleet. Endorsement password: optional; disk unlock doesn't use it. |
+| Lockout "laptop" profile: 10–32 tries, recovery of minutes to hours, short lockout-recovery. | **Correct** | We use 32 / 60 s / 60 s. |
+| Lockout "server" profile: about 10 tries, a central lockout password, lockout-recovery about 1 s, sometimes no self-healing. | **Not for us** | A lockout blocks boot unlock, so a box that never heals needs a hands-on reset. Couldn't confirm the "TCG profiles" wording. |
+| Windows uses 32 tries and 10 minutes. | **Correct** | Microsoft's *TPM fundamentals* page: since Win10 1703, 32 failures, one forgotten every 10 powered-on minutes (1607 and earlier: every 2 hours). A wrong lockout password blocks retries for 24 hours. |
+| Raise max tries so power cuts don't lock the TPM. | **Correct** | Every boot unlock uses a lockout-protected key, so unclean shutdowns count. 32 tries plus 60 s recovery covers that. |
+| `tpm2_dictionarylockout -s -n 32 -t 600 -l 1 -p ''` | **Valid, matches Windows; not our values** | `-p ''` means an empty lockout password, which contradicts row 1. With `-t 600`, one failure is forgiven every 10 powered-on minutes. We use 60 s because a lockout here blocks boot unlock, so we keep 32/60/60. Check with `tpm2_getcap properties-variable`. |
+| Prefer SHA-256 (or SHA-384) PCR banks, not SHA-1 for new seals. | **Correct** | Scripts fall back to SHA-1 only when nothing else exists. Fleet runs set `PCR_BANK=sha256`. |
+| Allocate PCR banks before sealing, because changing them breaks seals. | **Correct, with two caveats** | Only *removing* the sealed bank breaks a seal. Allocation needs platform auth, so it is done in BIOS, not by a first-boot script. |
+| Keep the storage (owner) hierarchy enabled. | **Correct** | clevis seals there. |
+| Endorsement is privacy-sensitive: create the EK, keep endorsement auth, optionally disable endorsement. | **Correct but optional** | Not used for disk unlock. Disabling endorsement from the OS lasts only until the next reboot. |
+| Don't change the EPS. | **Correct** | It invalidates the vendor EK certificate. A TPM clear keeps the EPS. |
+| Shut down cleanly so the unclean-shutdown counter doesn't rise. | **Correct** | See the power-cut row. |
+| After firmware, Secure Boot or bootloader changes, reseal; don't treat PCR drift as lockout. | **Correct** | Re-run `provision.sh`. PCR 7 changes with the Secure Boot state: on/off, key or dbx updates (fwupd can push these), or a boot chain signed by a different certificate. A normal kernel or GRUB update does not change it. |
+| Never clear the TPM as a first fix when keys are sealed. | **Correct** | `tpmfix.sh` clears only when `lockoutAuthSet=1` and only after the passphrase is proven. |
+| Same first-boot script and same numbers on every box. | **Correct** | That is `provision.sh`. |
+| First-boot step: set hierarchy passwords. | **Wrong for us** | Owner password breaks clevis (row 1). |
+| First-boot step: allocate PCR banks. | **Wrong layer** | BIOS / racadm, not the OS. |
+| First-boot step: create a persistent storage primary and a seal policy. | **Not needed** | clevis recreates its primary on every bind and unlock and writes its own PCR policy. |
+| First-boot step: record the EK or attestation identity. | **Optional** | Only needed for fleet attestation; not used today. |
 
 ---
 
