@@ -1,5 +1,7 @@
 # TPM + LUKS auto-unlock — runbook
 
+Short Confluence-ready version: [TPM-GUIDE.md](TPM-GUIDE.md).
+
 Ubuntu 22.04 on ASUS NUC 15 Pro (Intel PTT) and Dell servers. Disk unlocks at boot through
 clevis, sealed to PCR 7 (the Secure Boot state), with a passphrase fallback.
 
