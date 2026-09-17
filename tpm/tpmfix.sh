@@ -40,7 +40,7 @@
 set -uo pipefail
 
 PCR_IDS="${PCR_IDS:-7}"
-PCR_BANK="${PCR_BANK:-sha256}"
+PCR_BANK="${PCR_BANK:-}"                             # empty: sha256 if the TPM has it, else sha1
 MAXTRIES="${MAXTRIES:-32}"                           # auth failures before lockout
 RECOVERY_TIME="${RECOVERY_TIME:-60}"                 # seconds until one failure is forgiven
 LOCKOUT_RECOVERY_TIME="${LOCKOUT_RECOVERY_TIME:-60}" # seconds before lockoutAuth may be retried
@@ -80,6 +80,28 @@ luks_pass_ok() {
     esac || continue
     PASS_SLOT="$(sed -n 's/^Key slot \([0-9]\{1,\}\) unlocked.*/\1/p' <<<"$out" | head -n1)"
     return 0
+  done
+  return 1
+}
+
+# The PCR bank to seal against. Firmware decides which banks are allocated: Dell ships
+# some TPMs with only SHA-1 active, and then sealing to sha256 reads an empty PCR and
+# tpm2_createpolicy dies with "pcr-input-file filesize does not match pcr set-list".
+# A bank counts only if every PCR in PCR_IDS reads back a real value: all zeros (never
+# extended) or all Fs would seal to a state every boot has, as weak as no pcr_ids.
+bank_has_pcrs() {
+  local bank="$1" out id v
+  out="$(tpm2_pcrread "$bank:$PCR_IDS" 2>/dev/null)" || return 1
+  for id in ${PCR_IDS//,/ }; do
+    v="$(sed -n "s/^[[:space:]]*${id}[[:space:]]*:[[:space:]]*0x\([0-9A-Fa-f]\{1,\}\)[[:space:]]*$/\1/p" <<<"$out")"
+    [[ -n "$v" && "$v" =~ [1-9A-Ea-e] ]] || return 1
+  done
+}
+pick_bank() {
+  local b
+  if [[ -n "$PCR_BANK" ]]; then bank_has_pcrs "$PCR_BANK"; return; fi
+  for b in sha256 sha1; do
+    bank_has_pcrs "$b" && { PCR_BANK="$b"; return 0; }
   done
   return 1
 }
@@ -396,6 +418,14 @@ printf '  %-18s %s\n' "ownerAuthSet" "$OWNAUTH"
 printf '  %-18s %s\n' "inLockout" "$INLOCK"
 printf '  %-18s %ss\n' "lockoutRecovery" "$RCV"
 printf '  %-18s %s\n' "phEnable" "$PHEN"
+if pick_bank; then
+  printf '  %-18s %s\n' "pcr bank" "$PCR_BANK"
+  [[ "$PCR_BANK" == sha1 ]] && y "  only the SHA-1 PCR bank is active - works, but set the TPM to SHA-256 in BIOS
+    (Dell: System Security > TPM Advanced Settings > TPM2 Algorithm Selection) and re-run"
+else
+  r "  pcr bank           ${PCR_BANK:-sha256/sha1}: PCR $PCR_IDS unreadable - clevis cannot seal"
+  PCR_BANK_BAD=1
+fi
 if [[ -n "$CT_LN" ]]; then
   printf '  %-18s %s %s %s %s\n' "crypttab" "$CT_NAME" "$CT_SRC" "$CT_KEY" "$CT_OPTS"
 else
@@ -457,7 +487,10 @@ if [[ "$LOCKAUTH" == "0" ]]; then
     y "  slot $s is sealed to the TPM as it was before the clear - it can never unseal"
     y "    remove it once you are happy: sudo clevis luks unbind -d $DEV -s $s -f"
   done
-  if [[ -n "$BOUND" ]]; then
+  if [[ -z "$BOUND" && "${PCR_BANK_BAD:-0}" == 1 ]]; then
+    r "  no active PCR bank holds PCR $PCR_IDS (tpm2_getcap pcrs) - enable SHA-256 in BIOS"
+    FAILS=$((FAILS + 1))
+  elif [[ -n "$BOUND" ]]; then
     g "  slot $BOUND already unseals against the current PCR $PCR_IDS state - keeping it"
   elif ! need_clevis; then
     r "  so boot will ask for the passphrase every time"
@@ -469,7 +502,7 @@ if [[ "$LOCKAUTH" == "0" ]]; then
     luks_pass_ok "$PASS" "$DEV" || die "that passphrase does not open $DEV"
     g "  passphrase verified${PASS_SLOT:+ (keyslot $PASS_SLOT)}"
     if [[ "$DRY" == 1 ]]; then
-      printf '  DRY: clevis luks bind -y -k - -d %s tpm2 {...pcr_ids:%s}\n' "$DEV" "$PCR_IDS"
+      printf '  DRY: clevis luks bind -y -k - -d %s tpm2 {pcr_bank:%s,pcr_ids:%s}\n' "$DEV" "$PCR_BANK" "$PCR_IDS"
       BOUND=dry
     elif clevis_bind "$PASS" "$DEV"; then
       BOUND="$(slots | awk -v p="pcr_ids\":\"$PCR_IDS\"" '$2 == "tpm2" && index($3, p) { s = $1 } END { print s }')"
@@ -545,6 +578,10 @@ MSG
 if [[ -n "$CT_KS" ]] && ! stock_keyscript "$CT_KS" && ! ks_is_tpm "$CT_KS"; then
   die "$CT_NAME unlocks through $CT_KS, which does not look TPM-based. Read it, and remove keyscript= from $CT yourself if it depends on the TPM."
 fi
+
+# Clearing is pointless if phase 2 has no PCR bank to seal to: the box would end up on
+# the passphrase with an irreversible clear behind it.
+[[ "${PCR_BANK_BAD:-0}" == 1 ]] && die "no active PCR bank holds PCR $PCR_IDS - enable SHA-256 in BIOS first (tpm2_getcap pcrs)"
 
 b "1a. can you open $DEV without the TPM?"
 printf 'existing LUKS passphrase for %s: ' "$DEV" >&2

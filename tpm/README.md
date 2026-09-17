@@ -88,7 +88,12 @@ What it runs, in this order:
    longer unseals (BIOS or Secure Boot changed) does not count and is re-bound beside. `pcr_ids`
    is not optional: without it the key unseals in **any** boot state. Once the new slot is proven,
    the slots that no longer unseal are unbound — left in place they would release the key again if
-   that old firmware state ever came back.
+   that old firmware state ever came back. `pcr_bank` is `sha256` when the TPM has that bank
+   allocated, else `sha1` — some Dell servers ship with SHA-1 only, and sealing to the empty
+   sha256 bank fails with `pcr-input-file filesize does not match pcr set-list`. Neither bank
+   holds PCR 7 → `provision.sh` exits 2. Check with `tpm2_getcap pcrs`; prefer switching the BIOS
+   to SHA-256 (Dell: System Security → TPM Advanced Settings → TPM2 Algorithm Selection). Switching
+   banks after binding means the slot no longer unseals; re-run the script and it re-binds.
 3. `clevis luks pass` again — proves the TPM releases the key before a boot depends on it.
 4. `update-initramfs -u -k all` — every kernel, because one installed but not yet booted needs
    the clevis hook too.

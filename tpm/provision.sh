@@ -11,10 +11,29 @@ MAXTRIES="${MAXTRIES:-32}"
 RECOVERY_TIME="${RECOVERY_TIME:-60}"
 LOCKOUT_RECOVERY_TIME="${LOCKOUT_RECOVERY_TIME:-60}"
 PCR_IDS="${PCR_IDS:-7}"
-PCR_BANK="${PCR_BANK:-sha256}"
+PCR_BANK="${PCR_BANK:-}"   # empty: sha256 if the TPM has that bank allocated, else sha1
 DEV="${DEV:-$(blkid -t TYPE=crypto_LUKS -o device)}"   # more than one: set DEV, or this fails
 PASS="${LUKS_PASS-}"; unset LUKS_PASS     # unset drops the export: no child inherits it
 export TPM2TOOLS_TCTI="device:/dev/tpmrm0"
+
+# Firmware picks the allocated PCR banks; some Dell TPMs run SHA-1 only, and sealing to an
+# empty sha256 bank dies in tpm2_createpolicy ("pcr-input-file filesize does not match").
+# A bank counts only if every PCR in PCR_IDS reads a real value (not all 0s / all Fs).
+has() {
+  local out id v
+  out="$(tpm2_pcrread "$1:$PCR_IDS" 2>/dev/null)" || return 1
+  for id in ${PCR_IDS//,/ }; do
+    v="$(sed -n "s/^[[:space:]]*${id}[[:space:]]*:[[:space:]]*0x\([0-9A-Fa-f]\{1,\}\)[[:space:]]*$/\1/p" <<<"$out")"
+    [[ -n "$v" && "$v" =~ [1-9A-Ea-e] ]] || return 1
+  done
+}
+if [[ -z "$PCR_BANK" ]]; then
+  if has sha256; then PCR_BANK=sha256
+  elif has sha1; then PCR_BANK=sha1; echo "provision.sh: TPM has no SHA-256 PCR bank, sealing to sha1 (set SHA-256 in BIOS to fix)" >&2
+  else echo "provision.sh: no PCR bank holds PCR $PCR_IDS (tpm2_getcap pcrs)" >&2; exit 2; fi
+elif ! has "$PCR_BANK"; then
+  echo "provision.sh: PCR bank $PCR_BANK does not hold PCR $PCR_IDS (tpm2_getcap pcrs)" >&2; exit 2
+fi
 
 # slots sealed to PCR $PCR_IDS, and whether any of them still releases the key
 pinned()  { clevis luks list -d "$DEV" | grep -E "^[0-9]+: tpm2 .*\"pcr_ids\":\"$PCR_IDS\"" | cut -d: -f1 || true; }

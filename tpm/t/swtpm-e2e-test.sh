@@ -132,7 +132,7 @@ out="$(prov "$L4" LUKS_PASS=xxxxxx)"; rc=$?
 # ---- offline box, clevis missing: fails, binds nothing, installs nothing
 start_tpm; L7="$(new_luks)"
 mkdir -p "$W/nobin"
-for t in bash id blkid grep sed awk head cut printf cryptsetup tpm2_getcap tpm2_dictionarylockout; do
+for t in bash id blkid grep sed awk head cut printf cryptsetup tpm2_getcap tpm2_dictionarylockout tpm2_pcrread; do
   p="$(command -v "$t")" && ln -sf "$p" "$W/nobin/$t"
 done   # everything provision.sh runs EXCEPT clevis
 ln -sf "$W/bin/update-initramfs" "$W/nobin/update-initramfs"
