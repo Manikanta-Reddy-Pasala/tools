@@ -30,7 +30,8 @@ has() {
 if [[ -z "$PCR_BANK" ]]; then
   if has sha256; then PCR_BANK=sha256
   elif has sha1; then PCR_BANK=sha1; echo "provision.sh: TPM has no SHA-256 PCR bank, sealing to sha1 (set SHA-256 in BIOS to fix)" >&2
-  else echo "provision.sh: no PCR bank holds PCR $PCR_IDS (tpm2_getcap pcrs)" >&2; exit 2; fi
+  elif ! command -v tpm2_pcrread >/dev/null; then echo "provision.sh: tpm2_pcrread missing" >&2; exit 2
+  else echo "provision.sh: tpm2_pcrread found PCR $PCR_IDS in no bank (tpm2_getcap pcrs)" >&2; exit 2; fi
 elif ! has "$PCR_BANK"; then
   echo "provision.sh: PCR bank $PCR_BANK does not hold PCR $PCR_IDS (tpm2_getcap pcrs)" >&2; exit 2
 fi

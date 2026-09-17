@@ -1,314 +1,256 @@
-# TPM + LUKS auto-unlock on NUCs — runbook
+# TPM + LUKS auto-unlock — runbook
 
-How to set the TPM lockout parameters and bind disk auto-unlock to the TPM, on a **new**
-NUC and on one that is **already configured**. Two scripts do all of it:
+Ubuntu 22.04 on ASUS NUC 15 Pro (Intel PTT) and Dell servers. Disk unlocks at boot through
+clevis, sealed to PCR 7 (the Secure Boot state), with a passphrase fallback.
 
-| Script | Use it on | What it does |
+| Script | Run it when | Does |
 |---|---|---|
-| [`provision.sh`](provision.sh) | **New system**, or any box whose `lockoutAuthSet` is `0` | Sets the lockout parameters, binds clevis sealed to PCR 7, proves the TPM releases the key, rebuilds and checks the initramfs. One run, no reboot needed. |
-| [`tpmfix.sh`](tpmfix.sh) | **Already configured system** whose `lockoutAuthSet` is `1` (the parameters are refused), or a box that stops at `(initramfs)` | Two phases with a reboot between: clears the TPM safely, then does everything `provision.sh` does, plus repairs the boot unlock path. |
+| [`provision.sh`](provision.sh) | `lockoutAuthSet` = `0` (new box, or configured but never touched by Windows) | PCR bank check → lockout parameters → clevis bind to PCR 7 → proves unseal → `update-initramfs`. One run, no reboot. |
+| [`tpmfix.sh`](tpmfix.sh) | `lockoutAuthSet` = `1`, or every boot stops at `(initramfs)` | Phase 1 clears the TPM (reboot), phase 2 does what `provision.sh` does and repairs the boot unlock path. |
 
-Target: Ubuntu 22.04, Intel PTT firmware TPM (ASUS NUC 15 Pro). Both scripts are single
-files with no dependencies on each other or on anything else in this repo.
+Both are single offline files: no `apt-get`, no network. `tpmfix.sh` names any missing tool;
+`provision.sh` checks nothing and just fails on the first command that is missing
+(a missing `tpm2_pcrread` is named).
 
-**These are offline tools. Neither script installs anything** — no `apt-get`, no network.
-Everything they need must already be in the image; a missing piece is named and the run stops.
+---
 
-### Prerequisites — bake into the image
+## 1. Standard (apply the same way on every box)
+
+| Decision | Our setting | Why |
+|---|---|---|
+| Seal to | clevis `tpm2`, `pcr_ids` **7** | Released only in the same Secure Boot state. No `pcr_ids` = released to any kernel. |
+| PCR bank | **SHA-256** | Set it in BIOS **before** sealing — removing the sealed bank later breaks every seal (adding one does not). Scripts fall back to SHA-1 only if the TPM has nothing else; fleet runs pass `PCR_BANK=sha256` so that fails instead. |
+| Lockout parameters | `max-tries 32`, `recovery 60 s`, `lockout-recovery 60 s` | A lockout **blocks boot unlock** (see below). 32 absorbs power cuts; 60 s forgives one per powered-on minute. Set while `lockoutAuth` is empty; set again after any clear (a clear resets them to vendor defaults). |
+| Owner (storage) password | **leave empty** | clevis (jammy 18; noble 20 too) creates its primary in the owner hierarchy **with no password** — setting ownerAuth breaks both bind and boot unlock. |
+| Lockout password | empty today; if set, **unique per box**, kept in the vault | Empty = root (or the `tss` group) can reset a lockout or clear the TPM. A clear destroys keys but discloses nothing. Never share one value across the fleet. |
+| Endorsement | untouched | Not used by disk unlock. Never change the EPS — it invalidates the vendor EK certificate. |
+| Recovery | LUKS passphrase kept per box | A BIOS / Secure Boot / firmware change makes the TPM refuse — by design. Re-run `provision.sh` to reseal; never clear the TPM as a first fix. |
+
+Facts behind those choices:
+
+- **A dictionary-attack lockout blocks disk unlock.** The sealed key itself is `noda`, but clevis
+  loads it under a primary key created with default attributes, and that primary is **not**
+  `noda` (jammy `clevis-tpm2_18`). While the TPM is in lockout, that load fails. Boot then falls
+  back to the passphrase. Clear the lockout with `tpm2_dictionarylockout --clear-lockout`.
+- **Power cuts count.** Every boot unlock uses that DA-protected key, so an unclean shutdown
+  adds a failure. Use clean shutdowns where possible; 32 tries with 60 s recovery covers the
+  rest.
+- **Setting PCR banks is a firmware job.** `tpm2_pcrallocate` needs platform auth, which firmware
+  holds. Dell: *System Security → TPM Advanced Settings → TPM2 Algorithm Selection* (or racadm / Dell
+  Command | Configure across the fleet). Check with `tpm2_getcap pcrs`.
+- **Windows sets the lockout password** when it provisions an unowned TPM. It calls this the
+  "TPM owner password" and, by default since 1703, keeps it in the registry. Once Windows is gone, the only way to reset
+  the parameters is a TPM clear — hence `tpmfix.sh`.
+- **A clear** (`TPM2_Clear`) mainly does four things:
+  - changes the storage seed, so every sealed key dies;
+  - wipes the owner, endorsement and lockout passwords and policies, and the owner/endorsement
+    persistent objects and NV indices;
+  - resets the lockout parameters to vendor defaults;
+  - leaves the endorsement seed unchanged, so the same EK can be recreated.
+
+---
+
+## 2. Prerequisites (bake into the image)
 
 ```
-tpm2-tools  cryptsetup-bin  util-linux  dmsetup  initramfs-tools
-clevis  clevis-luks  clevis-tpm2  clevis-initramfs
+tpm2-tools cryptsetup-bin util-linux dmsetup initramfs-tools
+clevis clevis-luks clevis-tpm2 clevis-initramfs
 ```
-
-Check a box in one line (every one of these must print a path, and the hook must exist):
 
 ```bash
-for c in tpm2_getcap tpm2_dictionarylockout clevis clevis-luks-bind clevis-encrypt-tpm2 \
+for c in tpm2_getcap tpm2_pcrread tpm2_dictionarylockout clevis clevis-luks-bind clevis-encrypt-tpm2 \
          cryptsetup blkid dmsetup findmnt awk find update-initramfs unmkinitramfs; do
   command -v "$c" >/dev/null || echo "MISSING: $c"
 done
 [ -e /usr/share/initramfs-tools/hooks/clevis ] || echo "MISSING: clevis-initramfs hook"
 ```
 
-Silence means the box is ready. (`command -v a b c` is no good here — it exits 0 while a name
-in the middle is missing.)
+Silence = ready. Copy the scripts over (`scp provision.sh tpmfix.sh user@box:/tmp/` or USB), `chmod +x`.
 
----
-
-## 1. Get the scripts onto the box
-
-The box has no network, so copy them across — `scp` from a jump host, or a USB stick:
+## 3. Look first
 
 ```bash
-scp provision.sh tpmfix.sh user@nuc:/tmp/      # from a machine that does have the repo
+sudo ./tpmfix.sh --status      # read-only
+sudo tpm2_getcap pcrs          # sha256 must list PCR 7
 ```
 
-then on the NUC: `cd /tmp && chmod +x provision.sh tpmfix.sh`.
-
-## 2. Decide which script — always look first
-
-```bash
-sudo ./tpmfix.sh --status         # read-only, changes nothing (provision.sh takes no arguments)
-```
-
-Read the `lockoutAuthSet` line:
-
-| `lockoutAuthSet` | Meaning | Run |
+| Output | Meaning | Do |
 |---|---|---|
-| `0` | TPM accepts new lockout parameters | **§3 `provision.sh`** — new or already configured, same command |
-| `1` | Someone set the lockout password (Windows does this on its first boot). The TPM refuses new parameters until it is cleared. | **§4 `tpmfix.sh`** |
-
-Also look for these warnings in the same output:
-
-- `<-- NO pcr_ids` — a binding made with the old command. It unseals in any boot state. `tpmfix.sh` removes it; `provision.sh` only adds a pinned slot beside it.
-- `crypttab unlocks through ... keyscript` — boot does **not** use clevis, and if that script ever fails there is no passphrase prompt. See [§7](#7-why-it-is-done-this-way).
+| `lockoutAuthSet 0` | TPM accepts parameters | §4 `provision.sh` |
+| `lockoutAuthSet 1` | Lockout password set (Windows) | §5 `tpmfix.sh` |
+| `pcr bank sha1` / warning | No SHA-256 bank | Switch BIOS to SHA-256 first |
+| `<-- NO pcr_ids` | Old binding, unseals in any state | `tpmfix.sh` removes it; `provision.sh` only adds a pinned one |
+| `keyscript ... <-- boot unlock depends on this script` | Boot has no passphrase fallback | `tpmfix.sh` (see §8) |
 
 ---
 
-## 3. New system (or `lockoutAuthSet` = 0) — `provision.sh`
-
-Five commands in a file. It prints nothing, checks nothing beyond what the commands
-themselves enforce, and exits non-zero the moment one of them fails.
+## 4. `lockoutAuthSet` = 0 — `provision.sh`
 
 ```bash
 read -rs LUKS_PASS && export LUKS_PASS
-sudo --preserve-env=LUKS_PASS ./provision.sh
+sudo --preserve-env=LUKS_PASS PCR_BANK=sha256 ./provision.sh
 unset LUKS_PASS
 ```
 
-What it runs, in this order:
+It runs, in order:
 
-1. `tpm2_dictionarylockout --setup-parameters` — `max-tries=32`, `recovery-time=60`,
-   `lockout-recovery-time=60`. First, because the TPM only accepts them while
-   `lockoutAuthSet` is `0`. **If it is `1` this command fails and the script stops here
-   having bound nothing — run [`tpmfix.sh`](#4-already-configured-system-lockoutauthset--1).**
-2. `clevis luks bind … tpm2 '{"pcr_bank":"sha256","pcr_ids":"7"}'` — skipped when a pinned slot
-   already **unseals**, so re-running is safe and asks for nothing; a slot that exists but no
-   longer unseals (BIOS or Secure Boot changed) does not count and is re-bound beside. `pcr_ids`
-   is not optional: without it the key unseals in **any** boot state. Once the new slot is proven,
-   the slots that no longer unseal are unbound — left in place they would release the key again if
-   that old firmware state ever came back. `pcr_bank` is `sha256` when the TPM has that bank
-   allocated, else `sha1` — some Dell servers ship with SHA-1 only, and sealing to the empty
-   sha256 bank fails with `pcr-input-file filesize does not match pcr set-list`. Neither bank
-   holds PCR 7 → `provision.sh` exits 2. Check with `tpm2_getcap pcrs`; prefer switching the BIOS
-   to SHA-256 (Dell: System Security → TPM Advanced Settings → TPM2 Algorithm Selection). Switching
-   banks after binding means the slot no longer unseals; re-run the script and it re-binds.
-3. `clevis luks pass` again — proves the TPM releases the key before a boot depends on it.
-4. `update-initramfs -u -k all` — every kernel, because one installed but not yet booted needs
-   the clevis hook too.
+1. Picks the PCR bank. It exits `2` if PCR 7 can't be read from the requested bank or
+   (with no `PCR_BANK` set) from sha256 or sha1. An all-zero or all-F value counts as unreadable.
+2. `tpm2_dictionarylockout --setup-parameters` 32/60/60. Fails if `lockoutAuthSet` is 1 → nothing bound.
+3. `clevis luks bind -y -k - … tpm2 '{"pcr_bank":"…","pcr_ids":"7"}'`. This is skipped if a pinned
+   slot already unseals, so re-runs are safe. A pinned slot that no longer unseals is rebound. The
+   stale slot is removed only after the new one is proven.
+4. `clevis luks pass` — proves the TPM releases the key.
+5. `update-initramfs -u -k all`.
 
-`DEV` defaults to the only `crypto_LUKS` partition; on a box with more than one, `blkid` returns
-them all and the run fails — set `DEV` explicitly there. `MAXTRIES`, `RECOVERY_TIME`, `LOCKOUT_RECOVERY_TIME`, `PCR_IDS` and `PCR_BANK` override
-the values above.
+Exit 0 = done; `2` = PCR bank problem; `64` = it was given arguments; anything else = the command
+that failed (normal output is silenced; its error message still shows).
+It does **not** check crypttab, unpack the initrd, or remove unpinned bindings. Use
+`tpmfix.sh --status` for those.
 
-**What it deliberately does not do** — run `tpmfix.sh --status` (or the commands in
-[§6](#6-verify-after-the-reboot)) if you want any of it checked:
+Reboot once **at the machine**.
 
-- it does not look at `/etc/crypttab`, so a `keyscript=` entry or a live dm name that disagrees
-  with it is not caught — and either means the initrd cannot unlock the disk;
-- it does not unpack the new initrd, so `update-initramfs` returning 0 is all you know;
-- it does not remove a binding that has no `pcr_ids` (only stale PCR-pinned ones);
-- it says nothing on failure beyond the exit status. Re-run the failing command by hand to see
-  the error.
-
-Reboot once **at the machine**, never remotely, and keep the LUKS passphrase: after a BIOS or
-Secure Boot change the TPM will (correctly) refuse and boot will ask for it.
-
----
-
-## 4. Already configured system (`lockoutAuthSet` = 1) — `tpmfix.sh`
+## 5. `lockoutAuthSet` = 1 — `tpmfix.sh`
 
 ```bash
-sudo ./tpmfix.sh --status          # read-only
-sudo DRY=1 ./tpmfix.sh             # prints every change, makes none
+sudo DRY=1 ./tpmfix.sh         # prints changes instead of making them (still asks for passphrase + phrase)
+sudo ./tpmfix.sh               # phase 1
 ```
 
-### Phase 1 — clear the TPM
+**Phase 1** does the following, in order:
+
+1. Refuses if a crypttab keyscript does not look TPM-based, or if no PCR bank is usable.
+2. Checks the LUKS passphrase. It refuses to continue unless the passphrase opens the disk.
+3. Checks that the firmware offers a clear opcode.
+4. Asks you to type `CLEAR MY TPM AND DESTROY ITS KEYS`.
+5. Refuses if removing the clevis bindings would leave no keyslot.
+6. Moves boot off any TPM keyscript (crypttab backup kept).
+7. Removes the clevis bindings and rebuilds and checks the initrd.
+8. Queues a firmware (PPI) clear.
+
+> **Warning — Intel PTT clears on the next boot with no confirmation screen.**
+> Back out before rebooting: `echo 0 | sudo tee /sys/class/tpm/tpm0/ppi/request`. If crypttab
+> was changed, the script also prints the restore + `update-initramfs` command — run that too.
+> The clevis bindings are already removed, so after backing out boot asks for the passphrase.
+
+Reboot at the machine; the next boot asks for the passphrase (expected). Then:
 
 ```bash
-sudo ./tpmfix.sh
+sudo ./tpmfix.sh               # phase 2, detected automatically
 ```
 
-- Asks for the LUKS passphrase and **refuses to go on unless it opens the disk** (after
-  the clear, that passphrase is your only way in until phase 2).
-- If `/etc/crypttab` unlocks through a TPM keyscript, switches boot to the normal
-  passphrase prompt first, and records which keyslot dies with the clear.
-- Asks you to type `CLEAR MY TPM AND DESTROY ITS KEYS`.
-- Removes clevis bindings, rebuilds and checks the initramfs, then queues a TPM clear
-  through the firmware (PPI).
+**Phase 2** does the following, in order:
 
-> **Warning — Intel PTT does not ask.** On these NUCs the firmware clears the TPM on the
-> next boot with **no confirmation screen**. The reboot is the point of no return.
-> To back out before rebooting: `echo 0 | sudo tee /sys/class/tpm/tpm0/ppi/request`
+1. Repairs crypttab.
+2. Sets the lockout parameters to 32/60/60.
+3. Binds clevis to PCR 7 and proves it unseals.
+4. Removes unpinned bindings.
+5. Fixes the mapping name, then rebuilds the initrd and checks it.
 
-```bash
-sudo reboot                        # at the machine, with a keyboard
-```
+Reboot only when it ends with `DONE` **and** exits 0. If it prints `N step(s) above did not
+complete`, fix the step it names. The box still boots, most often asking for the passphrase.
 
-The next boot asks for the LUKS passphrase — expected.
-
-### Phase 2 — finish
-
-```bash
-sudo ./tpmfix.sh                   # same command; it detects phase 2 by itself
-```
-
-1. Repairs the boot unlock path: removes a TPM `keyscript=` from `/etc/crypttab`
-   (backup kept next to it), and renames the open disk mapping if it does not match
-   crypttab (see [§7](#7-why-it-is-done-this-way)).
-2. Lockout parameters `32 / 60 / 60`.
-3. clevis bind sealed to PCR 7, proven to unseal; removes bindings with no `pcr_ids`.
-4. `update-initramfs`, then checks the new initrd can unlock the disk.
-
-Reboot only when it ends with `DONE`.
-
----
-
-## 5. Box stops at `(initramfs)` on every boot
-
-At the `(initramfs)` prompt:
+## 6. Stuck at `(initramfs)`
 
 ```sh
-blkid | grep crypto_LUKS                          # find the partition, e.g. /dev/nvme0n1p3
-cryptsetup open /dev/nvme0n1p3 dm_crypt-0         # use the NAME from /etc/crypttab
+blkid | grep crypto_LUKS                      # e.g. /dev/nvme0n1p3
+cryptsetup open /dev/nvme0n1p3 dm_crypt-0     # NAME from /etc/crypttab
 lvm vgchange -ay
 exit
 ```
 
-Then, once booted: `sudo ./tpmfix.sh` (it is in phase 2 and repairs the boot path).
-If you opened it under another name, `tpmfix.sh` renames it; by hand it is
-`sudo dmsetup rename <name-you-used> dm_crypt-0`.
+Once booted: `sudo ./tpmfix.sh`. It repairs the boot path and renames the mapping if you used
+another name. By hand: `sudo dmsetup rename <name> dm_crypt-0`.
 
----
-
-## 6. Verify after the reboot
+## 7. Verify
 
 ```bash
 sudo ./tpmfix.sh --status
 sudo tpm2_getcap properties-variable | grep -E 'lockoutAuthSet|inLockout|MAX_AUTH_FAIL|LOCKOUT_INTERVAL|LOCKOUT_RECOVERY'
-sudo clevis luks list -d /dev/nvme0n1p3            # expect "pcr_ids":"7"
+sudo clevis luks list -d "$(blkid -t TYPE=crypto_LUKS -o device)"
 ```
 
-Expected: `TPM2_PT_MAX_AUTH_FAIL: 0x20` (32), `TPM2_PT_LOCKOUT_INTERVAL: 0x3C` (60),
-`TPM2_PT_LOCKOUT_RECOVERY: 0x3C` (60), and the machine booted without asking for the passphrase.
+Expected results:
+
+- `MAX_AUTH_FAIL: 0x20`, `LOCKOUT_INTERVAL: 0x3C`, `LOCKOUT_RECOVERY: 0x3C`.
+- The binding shows `"pcr_bank":"sha256","pcr_ids":"7"`.
+- The box boots without a passphrase prompt.
 
 ---
 
-## Settings
+## Settings (environment, both scripts)
 
-Both scripts read the same environment variables:
-
-| Variable | Default | `tpm2_dictionarylockout` flag | Meaning |
-|---|---|---|---|
-| `MAXTRIES` | `32` | `--max-tries` | Wrong-auth attempts before the TPM locks out |
-| `RECOVERY_TIME` | `60` | `--recovery-time` | Seconds until one failure is forgiven |
-| `LOCKOUT_RECOVERY_TIME` | `60` | `--lockout-recovery-time` | Seconds before the lockout password may be tried again after a failure (`0` = only after a reboot) |
-| `PCR_IDS` | `7` | — | PCR the disk key is sealed to (7 = Secure Boot state) |
-| `DEV` | the only `crypto_LUKS` partition | — | LUKS partition, if there is more than one |
-| `LUKS_PASS` | — | — | `provision.sh`: **required**, it never prompts. `tpmfix.sh` still asks |
-| `DRY` | `0` | — | `tpmfix.sh` only: `1` prints changes instead of making them |
-
-Example: `sudo MAXTRIES=10 RECOVERY_TIME=120 ./provision.sh`
-
----
+| Variable | Default | Meaning |
+|---|---|---|
+| `MAXTRIES` | `32` | `--max-tries`: failures before lockout |
+| `RECOVERY_TIME` | `60` | `--recovery-time`: seconds (powered on) to forgive one failure |
+| `LOCKOUT_RECOVERY_TIME` | `60` | `--lockout-recovery-time`: wait after a wrong lockout password (`0` = until reboot) |
+| `PCR_IDS` | `7` | PCRs to seal to |
+| `PCR_BANK` | sha256, else sha1 | Set `sha256` on the fleet to forbid the SHA-1 fallback |
+| `DEV` | only `crypto_LUKS` partition | Set it when there is more than one |
+| `LUKS_PASS` | — | `provision.sh` only: needed when it has to bind (it never prompts) |
+| `DRY` | `0` | `tpmfix.sh` only: print instead of change |
+| `ALLOW_NO_CLEVIS` | `0` | `tpmfix.sh` only: `1` = repair boot without clevis (passphrase only) |
+| `CRYPTTAB` / `STATE` | `/etc/crypttab` / `/var/lib/tpmfix` | `tpmfix.sh` only: paths |
 
 ## Command reference
 
-What the scripts run, for doing it — or checking it — by hand.
-
-**Read state (all read-only)**
-
 ```bash
-sudo tpm2_getcap properties-variable                 # lockoutAuthSet, inLockout, DA params
-sudo clevis luks list -d /dev/nvme0n1p3              # bindings and their pcr_ids
-sudo cryptsetup luksDump /dev/nvme0n1p3              # keyslots and tokens
-cat /etc/crypttab                                    # how boot unlocks the disk
-sudo dmsetup ls --target crypt                       # name the disk is open under now
-cat /sys/class/tpm/tpm0/ppi/tcg_operations           # firmware clear ops; status 4 = no prompt
-cat /sys/class/tpm/tpm0/ppi/request /sys/class/tpm/tpm0/ppi/response
-```
-
-**Lockout parameters** (only while `lockoutAuthSet` is `0`)
-
-```bash
-sudo tpm2_dictionarylockout --setup-parameters \
-  --max-tries=32 --recovery-time=60 --lockout-recovery-time=60
-sudo tpm2_dictionarylockout --clear-lockout          # leave an active lockout (empty lockoutAuth)
-```
-
-**Bind, check, remove**
-
-```bash
+# state (read-only)
+sudo tpm2_getcap properties-variable       # lockoutAuthSet, inLockout, DA params
+sudo tpm2_getcap pcrs                      # allocated PCR banks
 DEV=$(blkid -t TYPE=crypto_LUKS -o device)
+sudo clevis luks list -d "$DEV"            # bindings + pcr_ids
+sudo cryptsetup luksDump "$DEV"            # keyslots, tokens
+cat /etc/crypttab; sudo dmsetup ls --target crypt
+cat /sys/class/tpm/tpm0/ppi/tcg_operations # status 4 = firmware clears with no prompt
+
+# lockout parameters (lockoutAuth empty)
+sudo tpm2_dictionarylockout --setup-parameters --max-tries=32 --recovery-time=60 --lockout-recovery-time=60
+sudo tpm2_dictionarylockout --clear-lockout
+
+# bind / check / remove
 printf '%s' "$LUKS_PASS" | sudo clevis luks bind -y -k - -d "$DEV" tpm2 '{"pcr_bank":"sha256","pcr_ids":"7"}'
 sudo clevis luks pass -d "$DEV" -s 1 >/dev/null && echo "slot 1 unseals"
 sudo clevis luks unbind -d "$DEV" -s 1 -f
 sudo update-initramfs -u -k all
-```
 
-**Clear the TPM through the firmware** (irreversible — use `tpmfix.sh`, which checks first)
-
-```bash
-echo 5 | sudo tee /sys/class/tpm/tpm0/ppi/request    # queue: next boot clears, no prompt on PTT
-echo 0 | sudo tee /sys/class/tpm/tpm0/ppi/request    # cancel before rebooting
-```
-
-**Check what the next boot will run**
-
-```bash
+# what the next boot runs
 d=$(mktemp -d) && sudo unmkinitramfs /boot/initrd.img-$(uname -r) "$d"
-sudo cat "$d"/main/cryptroot/crypttab                # must list the crypttab name, no keyscript
-ls "$d"/main/scripts/local-top/ | grep clevis        # clevis auto-unlock hook
+sudo find "$d" -path '*cryptroot/crypttab' -exec cat {} +       # crypttab name, no keyscript
+sudo find "$d" -path '*scripts/local-top/*clevis*'              # clevis hook present
+
+# firmware clear (irreversible - prefer tpmfix.sh)
+echo 5 | sudo tee /sys/class/tpm/tpm0/ppi/request   # queue
+echo 0 | sudo tee /sys/class/tpm/tpm0/ppi/request   # cancel
+
+# dead keyslot (only once auto-unlock works)
+sudo cryptsetup luksKillSlot "$DEV" <slot>
 ```
 
-**Remove a dead keyslot** (only once auto-unlock works and you still have the passphrase)
+## 8. Gotchas
 
-```bash
-sudo cryptsetup luksKillSlot /dev/nvme0n1p3 <slot>
-```
+These are why the scripts work the way they do.
 
----
-
-## 7. Why it is done this way
-
-- **Lockout parameters first.** `tpm2_dictionarylockout` is authorised by the TPM's
-  lockout password. While it is empty, anyone with root can set the parameters. Windows
-  sets it on first boot (and calls it the "TPM owner password"), after which the only
-  reset is a TPM clear — which destroys every key sealed to the TPM. On a new box nothing
-  is sealed yet, so that is the moment to set them.
-- **`"pcr_ids":"7"`.** The old command `clevis luks bind ... tpm2 '{"pcr_bank":"sha256"}'`
-  seals to no boot state: the TPM hands the disk key to any kernel, Secure Boot on or off.
-  With PCR 7 it is released only in the same Secure Boot state. After a BIOS or Secure
-  Boot change the TPM will refuse and boot asks for the passphrase — by design; keep it.
-- **`-k -` and `printf`.** The documented way to pass the passphrase on stdin. Without `-k -`,
-  clevis reads it with an unguarded `read`; `echo -e` only works because it adds a newline.
-- **crypttab `keyscript=`.** With a keyscript, Ubuntu's `cryptroot` runs it three times
-  and then gives up — there is **no passphrase prompt as a fallback**, so any unseal
-  failure (TPM clear, BIOS change) means `(initramfs)` on every boot. clevis cannot help
-  either: it answers the passphrase prompt, which a keyscript entry never shows. The
-  plain `none luks` entry plus `clevis-initramfs` auto-unlocks normally and falls back to
-  the prompt.
-- **Name the disk is open under.** `update-initramfs` finds the root disk's crypttab entry
-  by the name it is open under right now. Unlocking by hand as anything other than the
-  crypttab name gives `cryptsetup: WARNING: target '<name>' not found in /etc/crypttab`
-  and an initrd that cannot unlock the disk at all. Both scripts check the new initrd
-  before telling you to reboot, and `tpmfix.sh` renames the mapping.
-- **Intel PTT clears silently.** Every clear opcode reports status 4 ("user not
-  required") in `/sys/class/tpm/tpm0/ppi/tcg_operations`, so there is no confirm screen.
-
----
+- **`-k -` with `printf`.** Without `-k -`, clevis reads the passphrase with an unguarded
+  `read`. Piped input with no trailing newline then kills the bind.
+- **crypttab `keyscript=`.** `cryptroot` runs the keyscript 3 times and then stops, with **no
+  passphrase fallback**. clevis only answers the passphrase prompt, so it can't help either.
+  Use `none luks` plus `clevis-initramfs`.
+- **Mapping name.** `update-initramfs` looks up the crypttab entry by the name the disk is
+  open under *now*. A wrong name gives `WARNING: target '<name>' not found in /etc/crypttab`
+  and an initrd that can't unlock the disk.
+- **Empty PCR bank.** The bind fails with `pcr-input-file filesize does not match pcr set-list`.
+  The TPM doesn't have the bank you asked for; see `tpm2_getcap pcrs`.
+- **Intel PTT PPI.** Every clear opcode reports status 4 ("user not required"), so the
+  clear happens without a prompt.
 
 ## Tests
 
-Run on a Linux box, not on the NUC being fixed.
+Run these on a Linux test box, never on the box being fixed.
 
 ```bash
-bash t/tpmfix-test.sh               # crypttab repair, keyslots, initrd checks (no root, no TPM)
-sudo bash t/tpmfix-test.sh          # + real dm-crypt mapping renamed while mounted
-sudo bash t/swtpm-e2e-test.sh       # provision.sh + tpmfix.sh phase 2 against a software TPM
+bash t/tpmfix-test.sh            # crypttab repair, keyslots, initrd checks
+sudo bash t/tpmfix-test.sh       # + real dm-crypt rename while mounted
+sudo bash t/swtpm-e2e-test.sh    # provision.sh + tpmfix.sh phase 2 against swtpm (docker, vTPM proxy; host TPM untouched)
 ```
-
-`swtpm-e2e-test.sh` needs docker. It runs real Ubuntu 22.04 `tpm2-tools`, `clevis` and
-`cryptsetup` against `swtpm`, exposed through the kernel's vTPM proxy and mounted over
-`/dev/tpmrm0` inside the container only — the host's TPM is never used.

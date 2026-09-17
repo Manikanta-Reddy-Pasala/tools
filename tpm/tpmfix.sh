@@ -373,7 +373,7 @@ STATUS_ONLY=0
 
 # ---------------------------------------------------------------- discover
 need=()
-for c in tpm2_getcap cryptsetup blkid awk; do command -v "$c" >/dev/null || need+=("$c"); done
+for c in tpm2_getcap tpm2_pcrread cryptsetup blkid awk; do command -v "$c" >/dev/null || need+=("$c"); done
 if (( STATUS_ONLY == 0 )); then   # --status must still report on a box that is missing packages
   for c in tpm2_dictionarylockout dmsetup findmnt find update-initramfs unmkinitramfs; do
     command -v "$c" >/dev/null || need+=("$c")
@@ -566,7 +566,7 @@ cat <<MSG
 lockoutAuthSet=1 and the password is unknown, so TPM2_DictionaryAttackParameters is
 refused and lockoutRecovery stays at ${RCV}s. The only reset is TPM2_Clear.
 
-This is IRREVERSIBLE. It regenerates the storage and endorsement seeds. Every key
+This is IRREVERSIBLE. It regenerates the storage seed (the endorsement seed stays). Every key
 sealed to this TPM is destroyed - the clevis binding(s) on $DEV, and the key behind
 any crypttab keyscript - which is why the passphrase check below is not optional.
 
@@ -667,7 +667,8 @@ cat <<MSG
 The TPM is wiped during that boot. It will then ask for your LUKS passphrase, which
 is expected: auto-unlock is gone until you run phase 2.
 
-To back out instead, before rebooting:
+To back out instead, before rebooting (the clevis bindings are already gone, so boot
+asks for the passphrase until you re-run this script and let it clear the TPM):
   echo 0 | sudo tee $PPI/request
 ${CT_BAK:+  sudo cp -p $CT_BAK $CT && sudo update-initramfs -u -k all}
 
