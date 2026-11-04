@@ -54,6 +54,9 @@ start_tpm() {  # fresh swtpm, visible to clevis as /dev/tpmrm0
   mount --bind "/dev/$new" /dev/tpmrm0
   # refuse to go on unless it really is the software TPM
   tpm2_getcap properties-fixed | grep -A2 MANUFACTURER | grep -q '"IBM"' || { echo "tpmrm0 is not swtpm"; exit 2; }
+  # real firmware measures Secure Boot into PCR 7; a fresh swtpm reads all zeros, which the
+  # scripts rightly treat as "bank not in use"
+  tpm2_pcrextend 7:sha1=$(printf '%040d' 7),sha256=$(printf '%064d' 7)
 }
 new_luks() {  # prints a loop device holding a fresh LUKS2 volume, passphrase xxxxxx
   local img="$W/luks$RANDOM.img"
@@ -62,6 +65,8 @@ new_luks() {  # prints a loop device holding a fresh LUKS2 volume, passphrase xx
   losetup -f --show "$img"
 }
 mkdir -p "$W/bin"; printf '#!/bin/sh\nexit 0\n' > "$W/bin/update-initramfs"; chmod +x "$W/bin/update-initramfs"
+# provision.sh lists every LUKS volume before a TPM clear; the test chooses which it sees
+printf '#!/bin/sh\n[ -n "$BLKID_OUT" ] && printf "%%s\\n" "$BLKID_OUT"\nexit 0\n' > "$W/bin/blkid"; chmod +x "$W/bin/blkid"
 prov() {  # prov DEV [VAR=value ...] - provision.sh takes no arguments
   local dev="$1"; shift
   env PATH="$W/bin:$PATH" DEV="$dev" "$@" bash /w/provision.sh </dev/null 2>&1
@@ -121,13 +126,67 @@ out="$(prov "$L3" LUKS_PASS=wrong)"; rc=$?
 [[ $rc != 0 && "$(nslots "$L3")" == 0 ]] \
   && ok "wrong passphrase: fails, nothing bound" || { bad "wrong passphrase: rc=$rc"; echo "$out"; }
 
-# ---- lockoutAuth set (what Windows leaves): the DA write fails, so nothing is bound
+# ---- lockoutAuth set (what Windows leaves): never tries a password, queues a PPI clear
 start_tpm
 tpm2_changeauth -c l windowsSecret
 L4="$(new_luks)"
-out="$(prov "$L4" LUKS_PASS=xxxxxx)"; rc=$?
-[[ $rc != 0 ]] && ok "lockoutAuth set: fails (run tpmfix.sh)" || { bad "lockoutAuth set: rc=$rc"; echo "$out"; }
+mkdir -p "$W/ppi"; printf ' 5 4: User not required\n' > "$W/ppi/tcg_operations"; : > "$W/ppi/request"
+out="$(prov "$L4" LUKS_PASS=xxxxxx PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && "$(cat "$W/ppi/request")" == 5 && "$out" == *Reboot* ]] \
+  && ok "lockoutAuth set: PPI clear (op 5) queued, exit 10" || { bad "lockoutAuth set: rc=$rc"; echo "$out"; }
 [[ "$(nslots "$L4")" == 0 ]] && ok "lockoutAuth set: nothing bound" || bad "lockoutAuth set: bound anyway"
+[[ "$(da TPM2_PT_LOCKOUT_COUNTER)" == 0x0 ]] && ok "lockoutAuth set: no auth failure counted" || bad "failure counted"
+: > "$W/ppi/request"
+out="$(prov "$L4" LUKS_PASS=wrong PPI="$W/ppi")"; rc=$?
+[[ $rc == 2 && ! -s "$W/ppi/request" ]] && ok "lockoutAuth set, wrong passphrase: nothing queued" || { bad "wrong pass: rc=$rc"; echo "$out"; }
+printf 5 > "$W/ppi/request"
+out="$(prov "$L4" LUKS_PASS=xxxxxx PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && "$out" == *"already queued"* ]] && ok "lockoutAuth set: clear already pending, not queued again" || { bad "pending: rc=$rc"; echo "$out"; }
+: > "$W/ppi/request"; printf '5 4294967295: General Failure\n' > "$W/ppi/response"
+out="$(prov "$L4" LUKS_PASS=xxxxxx PPI="$W/ppi")"; rc=$?
+[[ $rc == 3 && ! -s "$W/ppi/request" ]] && ok "lockoutAuth set: last clear failed -> BIOS, no re-queue loop" || { bad "failed clear: rc=$rc"; echo "$out"; }
+rm -f "$W/ppi/response"
+out="$(prov "$L4" LUKS_PASS=xxxxxx PPI="$W/ppi" BLKID_OUT="$L4
+$L")"; rc=$?
+[[ $rc == 2 && "$out" == *"$L also unlocks via the TPM"* && ! -s "$W/ppi/request" ]] \
+  && ok "lockoutAuth set, another TPM-unlocked volume: refuses to clear" || { bad "other volume: rc=$rc"; echo "$out"; }
+out="$(prov "$L4" LUKS_PASS=xxxxxx PPI="$W/noppi")"; rc=$?
+[[ $rc == 3 && "$out" == *BIOS* ]] && ok "lockoutAuth set, no PPI: says clear in BIOS, exit 3" || { bad "no PPI: rc=$rc"; echo "$out"; }
+
+# ---- ownerAuth set: clevis can never seal, so the same PPI clear
+start_tpm
+tpm2_changeauth -c o windowsOwner
+L5="$(new_luks)"; : > "$W/ppi/request"
+out="$(prov "$L5" LUKS_PASS=xxxxxx PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && "$(cat "$W/ppi/request")" == 5 && "$(nslots "$L5")" == 0 ]] \
+  && ok "ownerAuth set: PPI clear queued, nothing bound" || { bad "ownerAuth set: rc=$rc"; echo "$out"; }
+
+# ---- no LUKS device found: says so
+out="$(env PATH="$W/bin:$PATH" DEV= bash -c 'blkid() { return 2; }; export -f blkid; bash /w/provision.sh' 2>&1 </dev/null)"; rc=$?
+[[ $rc == 2 && "$out" == *"need one LUKS device"* ]] && ok "no LUKS device: exit 2 with a message" || { bad "no LUKS: rc=$rc"; echo "$out"; }
+
+# ---- lockout hierarchy locked by an earlier wrong password (the 0x921 in the field)
+start_tpm
+tpm2_dictionarylockout -s -n 32 -t 60 -l 1000 >/dev/null
+tpm2_dictionarylockout -c -p wrongpass >/dev/null 2>&1
+L8="$(new_luks)"
+out="$(prov "$L8" LUKS_PASS=xxxxxx)"; rc=$?
+[[ $rc == 75 && "$out" == *1000s* ]] && ok "lockout locked: exit 75, says wait 1000s" || { bad "lockout locked: rc=$rc"; echo "$out"; }
+[[ "$(nslots "$L8")" == 0 ]] && ok "lockout locked: nothing bound" || bad "lockout locked: bound anyway"
+
+# ---- DA lockout (inLockout=1, blocks clevis unlock too): cleared, then provisioned
+start_tpm
+tpm2_dictionarylockout -s -n 1 -t 1000 -l 60 >/dev/null
+tpm2_createprimary -Q -C o -c "$W/p.ctx"
+echo hi | tpm2_create -Q -C "$W/p.ctx" -p good -i- -u "$W/s.pub" -r "$W/s.priv"
+tpm2_load -Q -C "$W/p.ctx" -u "$W/s.pub" -r "$W/s.priv" -c "$W/s.ctx"
+tpm2_unseal -c "$W/s.ctx" -p bad >/dev/null 2>&1; tpm2_flushcontext -t >/dev/null 2>&1
+[[ "$(da inLockout)" == 1 ]] && ok "DA lockout: set up (inLockout 1)" || bad "DA lockout: not in lockout"
+L9="$(new_luks)"
+out="$(prov "$L9" LUKS_PASS=xxxxxx)"; rc=$?
+[[ $rc == 0 && "$(da inLockout)" == 0 && "$(da TPM2_PT_MAX_AUTH_FAIL)" == 0x20 ]] \
+  && ok "DA lockout: cleared, 32/60/60 set, exit 0" || { bad "DA lockout: rc=$rc inLockout=$(da inLockout)"; echo "$out"; }
+clevis luks list -d "$L9" | grep -q '"pcr_ids":"7"' && ok "DA lockout: bound with pcr_ids 7" || bad "DA lockout: not bound"
 
 # ---- offline box, clevis missing: fails, binds nothing, installs nothing
 start_tpm; L7="$(new_luks)"

@@ -117,7 +117,9 @@ Then reboot. The box should start without asking for the passphrase.
 | Boot asks for the passphrase | BIOS / Secure Boot changed, or the TPM is locked out | Type the passphrase, then re-run `provision.sh`. If locked out: `sudo tpm2_dictionarylockout --clear-lockout` |
 | Every boot stops at `(initramfs)` | Boot path broken | At the prompt: `cryptsetup open <luks-partition> dm_crypt-0`, `lvm vgchange -ay`, `exit`. Then run `sudo ./tpmfix.sh` |
 | `pcr-input-file filesize does not match pcr set-list` | TPM has no SHA-256 bank (seen on Dell) | Set SHA-256 in BIOS and re-run |
-| `provision.sh` exits `2` | No usable PCR bank, or `tpm2_pcrread` missing | Check `tpm2_getcap pcrs` and the BIOS setting |
+| `provision.sh` exits `2` | Message says which: PCR bank, LUKS device, passphrase, keyscript, other TPM volume | Check `tpm2_getcap pcrs` and the BIOS setting for a bank problem |
+| `provision.sh` exits `10` | Windows left a TPM password; clear queued (no prompt on Intel PTT) | Reboot, run it again |
+| `provision.sh` exits `75`, or `0x921` | TPM locked by an earlier wrong lockout password | Leave it powered on the printed seconds (or reboot), run it again |
 | Parameters refused (`provision.sh` fails at the start) | `lockoutAuthSet` = 1 | Use `tpmfix.sh` |
 
 ---

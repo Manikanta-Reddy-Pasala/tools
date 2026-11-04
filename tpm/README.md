@@ -7,7 +7,7 @@ clevis, sealed to PCR 7 (the Secure Boot state), with a passphrase fallback.
 
 | Script | Run it when | Does |
 |---|---|---|
-| [`provision.sh`](provision.sh) | `lockoutAuthSet` = `0` (new box, or configured but never touched by Windows) | PCR bank check → lockout parameters → clevis bind to PCR 7 → proves unseal → `update-initramfs`. One run, no reboot. |
+| [`provision.sh`](provision.sh) | Fresh install, on the installed system after first boot (not the installer) | PCR bank check → clears DA lockout → lockout parameters → clevis bind to PCR 7 → proves unseal → `update-initramfs`. If Windows left `lockoutAuthSet`/`ownerAuthSet` = `1` it queues a PPI clear (exit 10): reboot, run again. |
 | [`tpmfix.sh`](tpmfix.sh) | `lockoutAuthSet` = `1`, or every boot stops at `(initramfs)` | Phase 1 clears the TPM (reboot), phase 2 does what `provision.sh` does and repairs the boot unlock path. |
 
 Both are single offline files: no `apt-get`, no network. `tpmfix.sh` names any missing tool;
@@ -106,14 +106,14 @@ sudo tpm2_getcap pcrs          # sha256 must list PCR 7
 | Output | Meaning | Do |
 |---|---|---|
 | `lockoutAuthSet 0` | TPM accepts parameters | §4 `provision.sh` |
-| `lockoutAuthSet 1` | Lockout password set (Windows) | §5 `tpmfix.sh` |
+| `lockoutAuthSet 1` | Lockout password set (Windows) | §4 `provision.sh` (fresh install: PPI clear, reboot, re-run) or §5 `tpmfix.sh` (box with a keyscript / already in service) |
 | `pcr bank sha1` / warning | No SHA-256 bank | Switch BIOS to SHA-256 first |
 | `<-- NO pcr_ids` | Old binding, unseals in any state | `tpmfix.sh` removes it; `provision.sh` only adds a pinned one |
 | `keyscript ... <-- boot unlock depends on this script` | Boot has no passphrase fallback | `tpmfix.sh` (see §8) |
 
 ---
 
-## 4. `lockoutAuthSet` = 0 — `provision.sh`
+## 4. `provision.sh`
 
 ```bash
 read -rs LUKS_PASS && export LUKS_PASS
@@ -125,15 +125,29 @@ It runs, in order:
 
 1. Picks the PCR bank. It exits `2` if PCR 7 can't be read from the requested bank or
    (with no `PCR_BANK` set) from sha256 or sha1. An all-zero or all-F value counts as unreadable.
-2. `tpm2_dictionarylockout --setup-parameters` 32/60/60. Fails if `lockoutAuthSet` is 1 → nothing bound.
-3. `clevis luks bind -y -k - … tpm2 '{"pcr_bank":"…","pcr_ids":"7"}'`. This is skipped if a pinned
+2. If `lockoutAuthSet` or `ownerAuthSet` is 1 (Windows left it) it never tries a password (a wrong
+   one re-locks the TPM, `0x921`). It proves `LUKS_PASS`, refuses if crypttab has a keyscript or
+   another LUKS volume unlocks via the TPM, then queues PPI op 5 (TPM2_Clear) and exits `10`.
+   Intel PTT clears on the reboot **with no prompt**, wiping every TPM key (BitLocker too).
+   Re-run after the reboot. A clear already pending exits `10` again; a failed one exits `3`.
+3. `tpm2_dictionarylockout --clear-lockout`, then `--setup-parameters` 32/60/60 — two calls: jammy's
+   tool given both flags only clears and still exits 0. `0x921` (lockout hierarchy locked by an
+   earlier wrong password) → exits `75` with the wait (`LOCKOUT_RECOVERY`; 0 = until reboot).
+4. `clevis luks bind -y -k - … tpm2 '{"pcr_bank":"…","pcr_ids":"7"}'`. This is skipped if a pinned
    slot already unseals, so re-runs are safe. A pinned slot that no longer unseals is rebound. The
-   stale slot is removed only after the new one is proven.
-4. `clevis luks pass` — proves the TPM releases the key.
-5. `update-initramfs -u -k all`.
+   stale slot is removed only after the new one is proven; a new slot that does not unseal is removed.
+5. `clevis luks pass` — proves the TPM releases the key.
+6. `update-initramfs -u -k all`.
 
-Exit 0 = done; `2` = PCR bank problem; `64` = it was given arguments; anything else = the command
-that failed (normal output is silenced; its error message still shows).
+| Exit | Meaning |
+|---|---|
+| `0` | done |
+| `10` | TPM clear queued (or already pending): reboot, run again |
+| `75` | TPM locked (`0x921`): wait the printed seconds powered on, or reboot if it says so; run again |
+| `3` | clear the TPM in BIOS (PTT off → boot → on), or it was run from the installer / `curtin in-target` |
+| `2` | setup problem, message says which: PCR bank, LUKS device count, wrong passphrase, keyscript, another TPM-unlocked volume |
+| `64` | it was given arguments |
+| other | the command that failed (normal output is silenced; its error message still shows) |
 It does **not** check crypttab, unpack the initrd, or remove unpinned bindings. Use
 `tpmfix.sh --status` for those.
 
