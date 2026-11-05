@@ -11,8 +11,16 @@
       for answers. Proves multicast discovery works from this host/container
       without Wine. Also joins any multicast group the scanner streamed to.
 
+  pever <file.dll|exe> ...
+      Print the Windows file version of PE files (ViCom version = DLL file version).
+
   selftest
       Build a synthetic capture and check the parser.
+
+Known values from the R&S TSME6 user manual (4900.0033.02-08, "Firewall configuration"):
+  RxPort TSME6->PC 17476/udp, TxPort PC->TSME6 5140 and 16962/udp,
+  multicast TSME6 239.192.1.7, TSME 224.17.4.76, connection test 239.192.1.5:16962.
+  The TSME6 does not answer ICMP ping.
 
 Standard library only. Python 3.6+.
 """
@@ -27,6 +35,15 @@ import subprocess
 import sys
 import tempfile
 import time
+
+KNOWN_GROUPS = {"239.192.1.7": "TSME6 multicast", "224.17.4.76": "TSME multicast",
+                "239.192.1.5": "TSME connection-test multicast"}
+KNOWN_PORTS = {17476: "RxPort TSME6->PC", 5140: "TxPort PC->TSME6", 16962: "TxPort PC->TSME6"}
+
+
+def label(ip, port):
+    tags = [t for t in (KNOWN_GROUPS.get(ip), KNOWN_PORTS.get(port)) if t]
+    return "  [" + ", ".join(tags) + "]" if tags else ""
 
 
 # ------------------------------------------------------------------ pcap
@@ -50,26 +67,32 @@ def read_pcap(path):
 
 
 def ip_payload(linktype, pkt):
-    """Return the IPv4 packet inside a link-layer frame, or None."""
+    """Return (IPv4 packet, source MAC or None) inside a link-layer frame, or (None, None)."""
+    mac = None
     if linktype == 1:                       # Ethernet
         if len(pkt) < 14:
-            return None
+            return None, None
+        mac = ":".join("%02x" % b for b in pkt[6:12])
         et, off = struct.unpack("!H", pkt[12:14])[0], 14
         while et in (0x8100, 0x88A8) and len(pkt) >= off + 4:   # VLAN tags
             et, off = struct.unpack("!H", pkt[off + 2:off + 4])[0], off + 4
     elif linktype == 113:                   # Linux cooked (tcpdump -i any)
         if len(pkt) < 16:
-            return None
+            return None, None
+        if struct.unpack("!H", pkt[4:6])[0] == 6:
+            mac = ":".join("%02x" % b for b in pkt[6:12])
         et, off = struct.unpack("!H", pkt[14:16])[0], 16
     elif linktype == 276:                   # Linux cooked v2
         if len(pkt) < 20:
-            return None
+            return None, None
+        if pkt[11] == 6:
+            mac = ":".join("%02x" % b for b in pkt[12:18])
         et, off = struct.unpack("!H", pkt[0:2])[0], 20
     elif linktype in (101, 228):            # raw IPv4
         et, off = 0x0800, 0
     else:
-        return None
-    return pkt[off:] if et == 0x0800 else None
+        return None, None
+    return (pkt[off:], mac) if et == 0x0800 else (None, None)
 
 
 def parse_ipv4(ip):
@@ -120,14 +143,17 @@ def analyze(pcap, out, mine=None):
     mine = mine or local_ips()
     flows = collections.OrderedDict()
     igmp = collections.Counter()
+    macs = {}
     frags = 0
     total = 0
     for _, lt, pkt, orig in read_pcap(pcap):
-        ip = ip_payload(lt, pkt)
+        ip, mac = ip_payload(lt, pkt)
         p = parse_ipv4(ip) if ip else None
         if not p:
             continue
         total += 1
+        if mac and p["src"] not in mine:
+            macs.setdefault(p["src"], mac)
         frags += p["fragment"]
         if "igmp_group" in p:
             igmp[(p["src"], p["igmp_group"], p["igmp_type"])] += 1
@@ -154,13 +180,18 @@ def analyze(pcap, out, mine=None):
     req_ports = set(r["sport"] for r in requests) | set(r["dport"] for r in requests)
     for r in replies:
         r["answers_discovery"] = r["dport"] in req_ports or r["sport"] in req_ports
-    scanners = sorted(set(r["src"] for r in replies if r["answers_discovery"]))
+    scanners = set(r["src"] for r in replies if r["answers_discovery"])
+    # the manual's fixed ports/groups identify the scanner even without a request
+    scanners |= set(r["src"] for r in replies + streams if r["sport"] in KNOWN_PORTS or r["dport"] in KNOWN_PORTS
+                    or r["dst"] in KNOWN_GROUPS)
+    scanners = sorted(scanners)
 
     res = {
         "capture": pcap, "ipv4_packets": total, "fragments": frags, "local_ips": sorted(mine),
         "discovery_requests": requests, "replies_to_us": replies, "multicast_streams": streams,
         "igmp": [{"host": h, "group": g, "type": hex(t), "count": c} for (h, g, t), c in igmp.items()],
         "scanner_candidates": scanners,
+        "scanner_macs": {ip: macs.get(ip) for ip in scanners},
     }
     if out:
         with open(out, "w") as fh:
@@ -169,27 +200,54 @@ def analyze(pcap, out, mine=None):
     print("IPv4 packets %d, IP fragments %d, local IPs %s" % (total, frags, ", ".join(sorted(mine))))
     print("\n-- discovery requests sent by this host (multicast/broadcast):")
     for r in requests:
-        print("   %s:%d -> %s:%d  x%d  %d bytes" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"], r["max_len"]))
+        print("   %s:%d -> %s:%d  x%d  %d bytes%s" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"], r["max_len"],
+                                                 label(r["dst"], r["dport"])))
     if not requests:
         print("   NONE: start the capture BEFORE pressing search/refresh in the Device Manager")
     print("\n-- replies to this host:")
     for r in replies:
-        print("   %s:%d -> %s:%d  x%d  max %d bytes %s" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"],
-                                                         r["max_len"], "<- answers discovery" if r["answers_discovery"] else ""))
+        print("   %s:%d -> %s:%d  x%d  max %d bytes %s%s" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"],
+                                                           r["max_len"], "<- answers discovery" if r["answers_discovery"] else "",
+                                                           label(r["dst"], r["sport"])))
     if not replies:
         print("   NONE")
     print("\n-- multicast/broadcast from other hosts:")
     for r in streams[:15]:
-        print("   %s:%d -> %s:%d  x%d  max %d bytes" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"], r["max_len"]))
+        print("   %s:%d -> %s:%d  x%d  max %d bytes%s" % (r["src"], r["sport"], r["dst"], r["dport"], r["count"], r["max_len"],
+                                                     label(r["dst"], r["dport"])))
     if not streams:
         print("   NONE")
     print("\n-- IGMP (multicast group joins):")
     for (h, g, t), c in igmp.items():
-        print("   %s joins/reports %s (type %s) x%d" % (h, g, hex(t), c))
+        print("   %s joins/reports %s (type %s) x%d%s" % (h, g, hex(t), c, label(g, 0)))
     if not igmp:
         print("   NONE")
-    print("\nSCANNER CANDIDATES: %s" % (", ".join(scanners) or "none found"))
+    print("\nSCANNER CANDIDATES: %s" % (", ".join("%s (mac %s)" % (ip, macs.get(ip) or "?") for ip in scanners)
+                                       or "none found"))
+    if frags:
+        print("NOTE: IP fragments seen -> MTU on this path is below what the scanner sends (needs 9k jumbo).")
     return res
+
+
+# ------------------------------------------------------------------ pever
+def pe_version(path):
+    """FileVersion from VS_FIXEDFILEINFO, e.g. '21.0.0.123', or None."""
+    with open(path, "rb") as f:
+        data = f.read()
+    i = data.find(b"\xbd\x04\xef\xfe")
+    if i < 0 or i + 16 > len(data):
+        return None
+    ms, ls = struct.unpack("<II", data[i + 8:i + 16])
+    return "%d.%d.%d.%d" % (ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF)
+
+
+def pever(paths):
+    for p in paths:
+        try:
+            print("%s\t%s" % (pe_version(p) or "-", p))
+        except OSError as e:
+            print("?\t%s (%s)" % (p, e))
+    return 0
 
 
 # ------------------------------------------------------------------ probe
@@ -294,8 +352,8 @@ def _udp_frame(src, dst, sport, dport, payload, dst_mac=b"\x01\x00\x5e\x00\x00\x
 
 def selftest():
     frames = [
-        _udp_frame("192.168.0.10", "239.1.2.3", 50000, 4000, b"HELLO"),
-        _udp_frame("192.168.0.2", "192.168.0.10", 4000, 50000, b"I-AM-TSME" * 10),
+        _udp_frame("192.168.0.10", "239.192.1.7", 50000, 16962, b"HELLO"),
+        _udp_frame("192.168.0.2", "192.168.0.10", 16962, 50000, b"I-AM-TSME" * 10),
         _udp_frame("192.168.0.2", "239.9.9.9", 5000, 5001, b"x" * 100),
     ]
     fd, path = tempfile.mkstemp(suffix=".pcap")
@@ -312,7 +370,15 @@ def selftest():
         ("reply found", len(res["replies_to_us"]) == 1 and res["replies_to_us"][0]["answers_discovery"]),
         ("stream found", len(res["multicast_streams"]) == 1),
         ("scanner candidate", res["scanner_candidates"] == ["192.168.0.2"]),
+        ("scanner mac", res["scanner_macs"].get("192.168.0.2") == "02:00:00:00:00:01"),
     ]
+    fd, pe = tempfile.mkstemp(suffix=".dll")
+    with os.fdopen(fd, "wb") as f:
+        f.write(b"MZ" + b"\0" * 100 + b"\xbd\x04\xef\xfe" + b"\0\0\1\0" + struct.pack("<II", (21 << 16) | 0, (3 << 16) | 7))
+    try:
+        checks.append(("pe version", pe_version(pe) == "21.0.3.7"))
+    finally:
+        os.unlink(pe)
     bad = [n for n, good in checks if not good]
     print("\nSELFTEST:", "PASS" if not bad else "FAIL " + ", ".join(bad))
     return 1 if bad else 0
@@ -330,6 +396,8 @@ def main():
     p.add_argument("--tsme-ip")
     p.add_argument("--timeout", type=float, default=5)
     p.add_argument("--same-port", action="store_true")
+    v = sub.add_parser("pever")
+    v.add_argument("files", nargs="+")
     sub.add_parser("selftest")
     args = ap.parse_args()
     if args.cmd == "analyze":
@@ -337,6 +405,8 @@ def main():
         return 0
     if args.cmd == "probe":
         return probe(args.discovery, args.iface_ip, args.tsme_ip, args.timeout, args.same_port)
+    if args.cmd == "pever":
+        return pever(args.files)
     if args.cmd == "selftest":
         return selftest()
     ap.print_help()

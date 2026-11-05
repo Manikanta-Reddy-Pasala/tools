@@ -5,7 +5,7 @@ Small, self-contained sysadmin scripts. Each directory stands alone — clone th
 
 | Directory | What it is |
 |---|---|
-| [`tsme6/`](tsme6/) | R&S TSME6 scanner check from a Wine/Docker box: multicast discovery, replay probe, ViCom SDK listing, 2G/3G scan runs. Steps in [`tsme6/README.md`](tsme6/README.md). |
+| [`tsme6/`](tsme6/) | R&S TSME6 scanner check from a Wine/Docker box, built from the R&S manuals: network (jumbo, multicast 239.192.1.7, ports 5140/16962/17476), discovery replay, ViCom install check, TsmePing, GSM/WCDMA sample-app scans. Steps in [`tsme6/README.md`](tsme6/README.md). |
 | [`tpm/`](tpm/) | TPM + LUKS auto-unlock for NUCs: `provision.sh` for a new system, `tpmfix.sh` for one already configured (clears a TPM whose lockout password is set, repairs boot). Runbook in [`tpm/README.md`](tpm/README.md). |
 
 ## Conventions
