@@ -135,6 +135,63 @@ Output goes to `./tsme6_verify_out/`. Do not commit it.
 | Option Mask 0 / missing technologies | Options not read, or not licensed on this scanner (compare with the Windows PC) |
 | Load works but no results | Delete `TSME6_ID_*.cal` in bin and retry; check jumbo frames |
 
+## Field run 1 (2026-11-05): discovery works, scan does not
+
+Setup: VM 10.10.120.13, NIC `enp195s0` (MTU 9000), container on the host
+network, scanner at 10.10.120.86.
+
+| Step | Result | Meaning |
+|---|---|---|
+| `net` | OK | NIC up, MTU 9000, multicast leaves via the scanner NIC, ARP reachable |
+| `discover` | OK | Scanner beacons on 239.192.1.7:17476 received (also from its fallback 192.168.0.2, same MAC) |
+| `probe` | should be `PARTIAL` | No Device Manager search was captured, so only the receive path is proven |
+| `sdk` | **broken install** (passed only on the old, naive check) | See below |
+| `scan` | FAIL | No sample exe in the container, and the ViCom bin cannot run anyway |
+
+Why nothing that uses ViCom (sample apps or `scanner_main`) can read options
+or scan from that container:
+
+- `RuSProcessPhysicalLayer.exe` was a **19-byte stub**. This is ViCom's
+  network process, so nothing can reach the scanner.
+- `ViComResourceManager.dll` was a **symlink to `ViComLoaderManager.dll`**.
+  `ViComGSM.dll` and `ViComWCDMA.dll` were **symlinks to the `...w` variants**,
+  which by the manual's naming are most likely the TSMW model.
+- **Two ViCom versions were mixed**: ViCom 20.0.0.1359 DLLs plus later ones.
+- **Only 18 files**, and no Phylis runtime (`Phylis*.dll`, `ModulePool.dll`,
+  `IMD_Base.dll`, `libfftw3*.dll`).
+
+The `sdk` step now FAILs on all of these (kit `2026-11-05.4`).
+
+### Fix, in order
+
+1. **Pick one ViCom version.** It must match the headers `scanner_main` was
+   built with; see `C:\RuS\ViCom_<ver>` on the working Windows PC.
+   - If the scanner firmware is 05.08.10.00 or newer, use ViCom 21.0 or newer.
+   - The host VM has `RS-ViCom-Pro-26.0.0.4428`. Use it only if `scanner_main`
+     is (re)built against the 26 headers.
+2. **Move the hand-made folder aside and install properly:**
+   ```bash
+   mv /home/scanner/wine/drive_c/RuS/ViCom_20.0 /home/scanner/wine/drive_c/RuS/ViCom_20.0.fake
+   wine 'Z:\path\setup-RS-ViCom-<ver>.exe'      # or copy the WHOLE bin of that one version
+   winetricks -q vcrun2008 vcrun2013
+   ```
+3. **Check the install:** `./verify.sh sdk` must show no `[FAIL]`.
+4. **Re-test discovery:** run `./verify.sh discover` while the Device Manager
+   presses Search, then `./verify.sh probe`. Expect `PASS`, not `PARTIAL`.
+5. **Give the container a screen** for the GUI samples (see TESTING.md step 7):
+   `Xvfb :99 ... & x11vnc ... &`, then `export DISPLAY=:99` and open VNC to
+   `<vm>:5900`.
+6. **Run `./verify.sh scan`.** Load in the sample window, then screenshot
+   **Firmware Version** and **Option Mask**. If no GSM/WCDMA sample exists, the
+   RF power scan sample runs instead.
+7. **Then your own app:**
+   ```bash
+   GSM_EXE='C:\RuS\ViCom_<ver>\bin\scanner_main.exe' SCAN_MODE=console ./verify.sh scan
+   ```
+
+Send the raw output from an unchanged git clone. Each summary must start with
+`tsme6 kit 2026-11-05.4 sha e91cbde17a76`.
+
 ## Tests
 
 ```bash
