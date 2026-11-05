@@ -256,9 +256,13 @@ def probe(disc_path, iface_ip, tsme_ip, timeout, same_port):
         disc = json.load(fh)
     reqs = disc.get("discovery_requests", [])
     ok = False
-    if not reqs:
-        print("FAIL: no discovery request in %s. Capture again while the Device Manager searches." % disc_path)
+    beacons = [st for st in disc.get("multicast_streams", []) if st["dst"] in KNOWN_GROUPS or st["sport"] in KNOWN_PORTS]
+    if not reqs and not beacons:
+        print("FAIL: no discovery request and no scanner beacon in %s. Capture again while the Device Manager searches." % disc_path)
         return 1
+    if not reqs:
+        print("NOTE: no discovery request captured (Device Manager did not search during the capture).")
+        print("      Only the RECEIVE path (scanner beacons) can be tested; the SEND path is untested.")
     seen = set()
     for r in reqs:
         key = (r["dst"], r["dport"], r["payload_hex"])
@@ -337,6 +341,9 @@ def probe(disc_path, iface_ip, tsme_ip, timeout, same_port):
         print("   received %d packets in %.0fs" % (n, timeout))
         ok = ok or n > 0
 
+    if ok and not reqs:
+        print("\nRESULT: PARTIAL - scanner beacons received on this host; send path not tested (rerun discover with the Device Manager searching)")
+        return 3
     print("\nRESULT: %s" % ("PASS - scanner answers multicast discovery from this host"
                             if ok else "FAIL - no answer (check --network host, MTU, firewall, rp_filter, same subnet)"))
     return 0 if ok else 2

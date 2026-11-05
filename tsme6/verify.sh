@@ -61,8 +61,10 @@ TSME6_MCAST=239.192.1.7
 TEST_MCAST=239.192.1.5
 RX_PORT=17476
 TX_PORTS="5140 16962"
+KIT_VERSION=2026-11-05.4
 mkdir -p "$OUT"
 SUMMARY="$OUT/summary_${STEP#--}_$(date +%H%M%S).txt"
+KIT_SUM=$(cat "$0" "$HERE/tsme_net.py" 2>/dev/null | sha256sum | cut -c1-12)
 
 say()  { printf '[%s] %s\n' "$1" "$2" | tee -a "$SUMMARY"; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -158,6 +160,9 @@ step_net() {
     fc=$(ethtool -a "$IFACE" 2>/dev/null | awk '/^RX:/{rx=$2} /^TX:/{tx=$2} END{print "rx=" rx " tx=" tx}')
     say INFO "flow control $fc (ViCom manual: enable; TSME6 manual: disable if sporadic network issues)"
   fi
+  local nn
+  nn=$(ip neigh show dev "$IFACE" 2>/dev/null | grep -vc FAILED)
+  [ "${nn:-0}" -gt 3 ] && say WARN "$nn other hosts on $IFACE: manual wants a DEDICATED NIC for the TSME6, not an office LAN (static IP mode tolerates it if all IPs are unique)"
   neigh=$(ip neigh show "$TSME_IP" dev "$IFACE" 2>/dev/null)
   say INFO "ARP for $TSME_IP: ${neigh:-none yet}"
   if root && have iptables; then
@@ -214,6 +219,10 @@ step_probe() {
   local ip; ip=$(iface_ip "$IFACE"); ip=${ip%/*}
   python3 "$HERE/tsme_net.py" probe "$OUT/discovery.json" --iface-ip "$ip" --tsme-ip "$TSME_IP" --timeout 5 | tee "$OUT/probe.txt"
   if grep -q '^RESULT: PASS' "$OUT/probe.txt"; then say OK "multicast discovery works from this box without Wine"; return 0; fi
+  if grep -q '^RESULT: PARTIAL' "$OUT/probe.txt"; then
+    say WARN "only the receive path is proven (scanner beacons arrive). Send path untested: rerun 'discover' while the Device Manager searches, then 'probe'"
+    return 0
+  fi
   say WARN "no answer from a random port; retrying from the Device Manager's own source port"
   python3 "$HERE/tsme_net.py" probe "$OUT/discovery.json" --iface-ip "$ip" --tsme-ip "$TSME_IP" --timeout 5 --same-port | tee -a "$OUT/probe.txt"
   if grep -q '^RESULT: PASS' "$OUT/probe.txt"; then say OK "works only from the original source port (scanner answers a fixed port)"
@@ -232,15 +241,48 @@ step_sdk() {
     say OK "ViCom folder: $vroot"
     v=$(pe_ver "$vb/ViComLoaderManager.dll"); arch=$(pe_arch "$vb/ViComLoaderManager.dll")
     say INFO "ViCom version (folder) $(basename "$vroot") | ViComLoaderManager.dll $v $arch"
-    # required files, ViCom manual tables 4-1 (common), WCDMA, GSM; 'e' variants are the TSME ones
+    # required files, ViCom manual tables 4-1 (common), WCDMA, GSM; 'e' variants are the TSME ones.
+    # Each must be a REAL 32-bit PE file: not a symlink, not a placeholder.
+    local x sz tgt
     for f in ViComLoaderManager.dll ViComResourceManager.dll TsmeWorker.dll TsmeAdmin.dll TsmeTools.dll \
              TsmeParameters.dll TsmeResultProcessor.dll ServiceExtension_TSME.dll log4cxx.dll RSToolbox.dll \
              RuSProcessPhysicalLayer.exe \
              ViComGSM.dll ViComGSMe.dll GS3Worker.dll GsmDemodulator.dll \
              ViComWCDMA.dll ViComWCDMAe.dll UmtsDemodulator.dll; do
-      if [ -z "$(find "$vb" -maxdepth 1 -iname "$f" -print -quit)" ]; then say FAIL "   missing in bin: $f"; miss=$((miss + 1)); fi
+      x=$(find "$vb" "$vb/ProcessPhysicalLayer" -maxdepth 1 -iname "$f" -print -quit 2>/dev/null)
+      if [ -z "$x" ]; then say FAIL "   missing in bin: $f"; miss=$((miss + 1)); continue; fi
+      if [ -L "$x" ]; then
+        tgt=$(readlink "$x")
+        say FAIL "   $f is a SYMLINK to $tgt: not a real file (a renamed copy of another DLL does not work)"; miss=$((miss + 1)); continue
+      fi
+      sz=$(stat -c %s "$x"); arch=$(pe_arch "$x")
+      if [ "$arch" != x86 ]; then
+        say FAIL "   $f is not a 32-bit Windows binary (arch '$arch', $sz bytes): placeholder or wrong file"; miss=$((miss + 1)); continue
+      fi
+      [ -r "$x" ] || { say FAIL "   $f not readable by $(id -un)"; miss=$((miss + 1)); }
     done
-    [ "$miss" -eq 0 ] && say OK "all common + GSM + WCDMA ViCom files present"
+    [ "$miss" -eq 0 ] && say OK "all common + GSM + WCDMA ViCom files present and real 32-bit binaries"
+    [ "$miss" -gt 0 ] && say FAIL "ViCom install is broken ($miss bad files). Install ViCom with its setup.exe inside Wine, or copy the WHOLE bin folder of ONE ViCom version; do not create files by hand"
+
+    # one ViCom version only: all ViCom*/Tsme* DLLs must have the same major.minor
+    find "$vb" -maxdepth 1 -type f \( -iname 'ViCom*.dll' -o -iname 'Tsme*.dll' \) -print0 2>/dev/null \
+      | xargs -0 -r python3 "$HERE/tsme_net.py" pever 2>/dev/null | sort > "$OUT/sdk_versions.txt"
+    local vers
+    vers=$(cut -f1 "$OUT/sdk_versions.txt" | grep -v '^-$' | cut -d. -f1,2 | sort | uniq -c | awk '{printf "%s (%s files) ", $2, $1}')
+    say INFO "ViCom/Tsme DLL versions: ${vers:-none read} (sdk_versions.txt)"
+    if [ "$(cut -f1 "$OUT/sdk_versions.txt" | grep -v '^-$' | cut -d. -f1,2 | sort -u | wc -l)" -gt 1 ]; then
+      say FAIL "MIXED ViCom versions in one bin folder: use one version, matching the headers scanner_main was built with"
+    fi
+    local nfiles nphylis
+    nfiles=$(find "$vb" -maxdepth 1 -type f | wc -l)
+    nphylis=$(find "$vb" "$vb/ProcessPhysicalLayer" -maxdepth 1 -type f -iname 'Phylis*.dll' 2>/dev/null | wc -l)
+    say INFO "bin has $nfiles files, $nphylis Phylis*.dll"
+    if [ "$nphylis" -lt 3 ]; then
+      say FAIL "Phylis runtime DLLs missing (ViCom manual table 4-1 lists Phylis*.dll, ModulePool.dll, IMD_Base.dll, libfftw3*.dll ...): the bin folder is a partial copy"
+    fi
+    for x in ModulePool.dll IMD_Base.dll libfftw3-3.dll libfftw3f-3.dll; do
+      [ -n "$(find "$vb" "$vb/ProcessPhysicalLayer" -maxdepth 1 -iname "$x" -print -quit 2>/dev/null)" ] || say WARN "   not found: $x (listed in the manual's common files)"
+    done
     if [ -n "$(find "$vb" -maxdepth 1 -type d -iname PhylisKernelRouting -print -quit)" ]; then say OK "PhylisKernelRouting folder present"
     else say FAIL "PhylisKernelRouting folder missing next to the DLLs (the Phylis kernel needs it)"; fi
     fw=$(find "$vb" -maxdepth 1 -iname 'tsme*.bin' -printf '%f ' 2>/dev/null)
@@ -249,7 +291,7 @@ step_sdk() {
     say INFO "calibration files: ${cal:-none yet (downloaded on first connect)}"
     if [ -w "$vb" ]; then say OK "bin folder writable (needed for the .cal download and LogFiles)"
     else say FAIL "bin folder NOT writable by $(id -un): chown -R $(id -un) \"$vb\""; fi
-    find "$vb" -maxdepth 1 -iname 'SampleForViCom*.exe' -printf '%f\n' | sort | while IFS= read -r f; do say INFO "   sample: $f"; done
+    find "$vroot" -maxdepth 3 -iname 'SampleForViCom*.exe' -printf '%P\n' | sort | while IFS= read -r f; do say INFO "   sample: $f"; done
     for f in inc src doc tools; do [ -d "$vroot/$f" ] && say INFO "   $f/ present"; done
   fi
 
@@ -380,13 +422,28 @@ step_scan() {
   apps=$(other_tsme_apps)
   if [ -n "$apps" ]; then say FAIL "close other TSME programs first (Device Manager etc.): only one app may use the scanner"; printf '%s\n' "$apps" | cut -c1-150; return 1; fi
   vb=$(find_vicom_bin)
-  if [ -n "$GSM_EXE" ]; then g=$(to_unix "$GSM_EXE"); elif [ -n "$vb" ]; then g=$(find "$vb" -maxdepth 1 -iname 'SampleForViComGSM.exe' | head -n1); fi
-  if [ -n "$WCDMA_EXE" ]; then w=$(to_unix "$WCDMA_EXE"); elif [ -n "$vb" ]; then w=$(find "$vb" -maxdepth 1 -iname 'SampleForViComWCDMA.exe' | head -n1); fi
+  local vroot=""; [ -n "$vb" ] && vroot=$(dirname "$vb")
+  if [ -z "${DISPLAY:-}" ]; then
+    say FAIL "DISPLAY not set: the ViCom sample apps are GUI programs. Start a virtual screen you can see, e.g.:"
+    say INFO "   Xvfb :99 -screen 0 1600x1000x24 & x11vnc -display :99 -forever -nopw &   then  export DISPLAY=:99  and connect a VNC viewer to <vm>:5900"
+    return 1
+  fi
+  if [ -n "$GSM_EXE" ]; then g=$(to_unix "$GSM_EXE"); elif [ -n "$vroot" ]; then g=$(find "$vroot" -maxdepth 3 -iname 'SampleForViComGSM.exe' | head -n1); fi
+  if [ -n "$WCDMA_EXE" ]; then w=$(to_unix "$WCDMA_EXE"); elif [ -n "$vroot" ]; then w=$(find "$vroot" -maxdepth 3 -iname 'SampleForViComWCDMA.exe' | head -n1); fi
+  if [ -z "${g:-}" ] && [ -z "${w:-}" ] && [ -n "$vroot" ]; then
+    local rf; rf=$(find "$vroot" -maxdepth 3 -iname 'SampleForViComRFPowerScan.exe' | head -n1)
+    if [ -n "$rf" ]; then
+      say WARN "no GSM/WCDMA sample in this ViCom; running SampleForViComRFPowerScan.exe instead: it still shows Load + Firmware Version + Option Mask"
+      run_scan RFPOWER "$rf" "" 'power|dbm|freq'
+      return
+    fi
+  fi
   # 2G: power/BSIC/cell ids; 3G: Ec/Io, RSCP, scrambling code, cell ids
   run_scan GSM   "${g:-}" "$GSM_ARGS"   'arfcn|bsic|rssi|power|sch|bcch|mcc|lac|cell'
   run_scan WCDMA "${w:-}" "$WCDMA_ARGS" 'uarfcn|psc|scrambl|rscp|ec/?io|cpich|cir|mcc|cell'
 }
 
+say INFO "tsme6 kit $KIT_VERSION sha $KIT_SUM (compare with 'sha256sum' of the files in git; a different sha = modified scripts)"
 case $STEP in
   --status) step_status ;;
   net)      step_net ;;

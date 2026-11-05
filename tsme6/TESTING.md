@@ -11,6 +11,17 @@ block. Screenshot it, then go to the next step.
 
 Background (ports, versions, why each check exists) is in [README.md](README.md).
 
+## Rules (these keep the results honest)
+
+1. **Run `./verify.sh` from the git clone, unchanged.** Every SUMMARY starts with
+   `tsme6 kit <version> sha <hash>`. Include that line in each screenshot. A
+   wrapper or edited copy shows a different hash, and its results can't be
+   trusted.
+2. **Never hand-make ViCom files** to get past a check: no symlinks, no
+   renamed DLLs, no stub `.exe`. Install ViCom with its `setup-RS-ViCom-*.exe`,
+   or copy the **whole** `bin` folder of **one** ViCom version.
+3. **Paste raw output.** Don't paste summaries rewritten by a person or an AI.
+
 ---
 
 ## 0. One-time setup
@@ -102,7 +113,9 @@ run this step again. Nothing later works until this step passes.
 ```
 
 While the 60 s capture runs, press **Search/Refresh** in the TSME Device Manager
-and open the **Options** tab. Then **close the Device Manager**: only one
+and open the **Options** tab. Without that, only the scanner's own beacons are
+captured. `probe` then reports `PARTIAL`: the receive path is proven, the send
+path is not. Then **close the Device Manager**: only one
 program may use the scanner at a time.
 
 **Pass:**
@@ -164,7 +177,18 @@ window too.
 ./verify.sh scan
 ```
 
-The GSM sample opens first, then the WCDMA sample. In each window:
+The sample apps are GUI programs, so you need a screen you can see. In a
+headless container:
+
+```bash
+apt-get install -y xvfb x11vnc
+Xvfb :99 -screen 0 1600x1000x24 &  x11vnc -display :99 -forever -nopw &
+export DISPLAY=:99        # then open a VNC viewer to <vm-ip>:5900
+```
+
+The GSM sample opens first, then the WCDMA sample. If the ViCom version has no
+GSM/WCDMA sample exe, `SampleForViComRFPowerScan.exe` runs instead. It still
+shows Load, Firmware Version and Option Mask. In each window:
 
 1. Set **Type = TSME**, then press **Load**. Wait; the first time takes 1–3 min.
 2. **Screenshot the "Firmware Version" and "Option Mask" values.** This is the
