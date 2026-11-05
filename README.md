@@ -5,6 +5,7 @@ Small, self-contained sysadmin scripts. Each directory stands alone — clone th
 
 | Directory | What it is |
 |---|---|
+| [`tsme6/`](tsme6/) | R&S TSME6 scanner check from a Wine/Docker box: multicast discovery, replay probe, ViCom SDK listing, 2G/3G scan runs. Steps in [`tsme6/README.md`](tsme6/README.md). |
 | [`tpm/`](tpm/) | TPM + LUKS auto-unlock for NUCs: `provision.sh` for a new system, `tpmfix.sh` for one already configured (clears a TPM whose lockout password is set, repairs boot). Runbook in [`tpm/README.md`](tpm/README.md). |
 
 ## Conventions

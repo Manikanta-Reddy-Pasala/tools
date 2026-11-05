@@ -1,0 +1,10 @@
+# vendor files and captures never go in this public repo
+tsme6_verify_out/
+*.pcap
+*.dll
+*.exe
+*.lib
+*.h
+*.hpp
+*.lic
+*.key
