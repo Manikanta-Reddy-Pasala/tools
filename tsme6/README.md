@@ -11,10 +11,13 @@ Nothing from R&S is stored in this repo. You point the scripts at your
 installed R&S software. `.gitignore` blocks DLLs, exes, headers and captures,
 because this repo is public.
 
+**To test, follow [TESTING.md](TESTING.md)**: setup, the 8 steps in order, what a pass looks like, what to send back.
+
 | File | What |
 |---|---|
 | `verify.sh` | The steps below. Each one prints a `SUMMARY` block to screenshot |
 | `tsme_net.py` | Capture analysis, discovery replay, PE file version (standard-library Python 3) |
+| `TESTING.md` | Step-by-step test guide |
 | `t/test_tsme_net.sh` | Tests; run on a Linux box |
 
 ## How the PC talks to a TSME6 (from the manuals)
