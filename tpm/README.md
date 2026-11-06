@@ -7,7 +7,7 @@ clevis, sealed to PCR 7 (the Secure Boot state), with a passphrase fallback.
 
 | Script | Run it when | Does |
 |---|---|---|
-| [`provision.sh`](provision.sh) | Fresh install, on the installed system after first boot (not the installer) | PCR bank check → clears DA lockout → lockout parameters → clevis bind to PCR 7 → proves unseal → `update-initramfs`. If Windows left `lockoutAuthSet`/`ownerAuthSet` = `1` it queues a PPI clear (exit 10): reboot, run again. |
+| [`provision.sh`](provision.sh) | Fresh install: on the installed system, or from autoinstall `late-commands` (hands off to a first-boot unit, §4a) | PCR bank check → clears DA lockout → lockout parameters → clevis bind to PCR 7 → proves unseal → `update-initramfs`. If Windows left `lockoutAuthSet`/`ownerAuthSet` = `1` it queues a PPI clear (exit 10): reboot, run again. |
 | [`tpmfix.sh`](tpmfix.sh) | `lockoutAuthSet` = `1`, or every boot stops at `(initramfs)` | Phase 1 clears the TPM (reboot), phase 2 does what `provision.sh` does and repairs the boot unlock path. |
 
 Both are single offline files: no `apt-get`, no network. `tpmfix.sh` names any missing tool;
@@ -20,7 +20,7 @@ Both are single offline files: no `apt-get`, no network. `tpmfix.sh` names any m
 
 | Decision | Our setting | Why |
 |---|---|---|
-| Seal to | clevis `tpm2`, `pcr_ids` **7** | Released only in the same Secure Boot state. No `pcr_ids` = released to any kernel. |
+| Seal to | clevis `tpm2`, `pcr_ids` **7** | Released only in the same Secure Boot state. No `pcr_ids` = released to any kernel. Needs **Secure Boot on** to mean anything (§4b). |
 | PCR bank | **SHA-256** | Set it in BIOS **before** sealing — removing the sealed bank later breaks every seal (adding one does not). Scripts fall back to SHA-1 only if the TPM has nothing else; fleet runs pass `PCR_BANK=sha256` so that fails instead. |
 | Lockout parameters | `max-tries 32`, `recovery 60 s`, `lockout-recovery 60 s` | A lockout **blocks boot unlock** (see below). 32 absorbs power cuts; 60 s forgives one per powered-on minute. Set while `lockoutAuth` is empty; set again after any clear (a clear resets them to vendor defaults). |
 | Owner (storage) password | **leave empty** | clevis (jammy 18; noble 20 too) creates its primary in the owner hierarchy **with no password** — setting ownerAuth breaks both bind and boot unlock. |
@@ -144,7 +144,7 @@ It runs, in order:
 | `0` | done |
 | `10` | TPM clear queued (or already pending): reboot, run again |
 | `75` | TPM locked (`0x921`): wait the printed seconds powered on, or reboot if it says so; run again |
-| `3` | clear the TPM in BIOS (PTT off → boot → on), or it was run from the installer / `curtin in-target` |
+| `3` | clear the TPM in BIOS (PTT off → boot → on) |
 | `2` | setup problem, message says which: PCR bank, LUKS device count, wrong passphrase, keyscript, another TPM-unlocked volume |
 | `64` | it was given arguments |
 | other | the command that failed (normal output is silenced; its error message still shows) |
@@ -152,6 +152,62 @@ It does **not** check crypttab, unpack the initrd, or remove unpinned bindings. 
 `tpmfix.sh --status` for those.
 
 Reboot once **at the machine**.
+
+## 4a. From the installer (autoinstall `late-commands`)
+
+```yaml
+late-commands:
+  - cp /cdrom/software/provision.sh /target/usr/local/bin/ && chmod +x /target/usr/local/bin/provision.sh
+  # passphrase in a file on tmpfs (/run is shared with the chroot): never on a command line
+  - install -m 600 /cdrom/software/luks.pass /run/luks.pass; curtin in-target --target=/target -- env LUKS_PASS_FILE=/run/luks.pass /usr/local/bin/provision.sh; rc=$?; rm -f /run/luks.pass; exit $rc
+```
+The installed system needs the §2 packages (`tpm2-tools clevis clevis-luks clevis-tpm2
+clevis-initramfs`) in `packages:`; without them the script stops the install (exit `2`).
+
+What it does in the installer (detected: `/` is not PID 1's root, or `/target` is mounted):
+
+1. checks the passphrase opens the disk and the tools are in the installed system (exit `2` if not);
+2. adds a **one-time random key** to a spare LUKS slot, in `/var/lib/tpm-provision/key` (dir 0700, file 0600);
+3. writes `/var/lib/tpm-provision/env` (`DEV` by UUID, `STAGE`, `PCR_*` and lockout settings);
+4. copies itself to `/usr/local/sbin/tpm-provision` and enables `tpm-provision.service`;
+5. **in the `curtin in-target` chroot: binds the TPM right there** and rebuilds the installed
+   initrd, the normal §4 steps. With Secure Boot off, PCR 7 holds only firmware settings, so
+   the USB boot and the disk boot read the same value; the first boot unlocks with no prompt.
+   If any TPM step fails here (TPM clear needed, TPM locked, PTT off, clevis error), it says
+   `TPM bind left to the first boot` and still exits `0`: the install never fails over the TPM.
+   From the live installer shell (not a chroot) it binds nothing and leaves it all to the first boot.
+
+**First boot**: the unit runs the script with the one-time key. If the installer's slot already
+unseals it binds nothing; if this boot reads another PCR 7 (that boot asked for the passphrase
+once) it binds again and drops the stale slot. Then it **removes the one-time key slot**, deletes
+the key and disables itself. Exit `10` (Windows left a TPM password) reboots for the clear, at
+most 3 times; exit `75` retries every 90 s, 5 times. The unit does not hold up boot.
+
+If it fails for good, the one-time key stays (a working LUKS key, inside the encrypted root):
+`journalctl -u tpm-provision`, fix, then `sudo systemctl reset-failed tpm-provision && sudo systemctl start tpm-provision`.
+
+Check after the first install: `sudo cryptsetup luksDump <dev>` = passphrase slot + clevis slot
+only, and `/var/lib/tpm-provision` is gone. `NO_INSTALLER=1` forces a normal run in a chroot.
+
+## 4b. Secure Boot off
+
+`provision.sh` still binds and the box still auto-unlocks: PCR 7 has a value with Secure Boot
+off (it records `SecureBoot = 0` plus the PK/KEK/db/dbx databases). It warns, because with
+Secure Boot off whatever boots first runs unchecked and **can reproduce that PCR 7** (replay the
+expected events), so any USB stick can unseal the key. The binding then only protects a disk
+taken out of the box (the TPM stays behind). No UEFI at all (legacy BIOS boot) also warns.
+
+| Option | Effect | Cost |
+|---|---|---|
+| **Turn Secure Boot on** (recommended) | PCR 7 also records the keys that verified the boot chain; unsigned media can no longer fake it | Ubuntu's signed shim boots as is; DKMS modules (e.g. nvidia) need MOK enrolment. Turning it on changes PCR 7: the next boot asks for the passphrase once, then run `provision.sh` again (rebinds, drops the stale slot). |
+| `PCR_IDS=5,7` | adds the boot disk's partition table (most firmware measures the GPT it boots from) | stops booting another disk only; repartitioning needs a re-run |
+| `PCR_IDS=4,7` | adds the boot loader binaries (shim, grub; on newer grub also the kernel) | the next boot after every such update asks for the passphrase until `provision.sh` is re-run. Check `tpm2_eventlog /sys/kernel/security/tpm0/binary_bios_measurements` on one box first |
+
+Neither 4 nor 5 stops the cheapest attack: boot the box's own disk and edit the grub command
+line (`break=premount`, `init=/bin/sh`) at the keyboard; the command line and initrd are
+measured into PCR 8/9, not 4/5/7. Even with Secure Boot on, a signed Ubuntu live USB reads the
+same PCR 7, and Ubuntu does not sign the initrd. PCR 7 auto-unlock stops a stolen disk and
+unsigned boot media, not a person with the whole box.
 
 ## 5. `lockoutAuthSet` = 1 — `tpmfix.sh`
 

@@ -36,7 +36,9 @@ bad() { fail=$((fail+1)); printf 'FAIL %s\n' "$1"; }
 W="$(mktemp -d)"
 cleanup() {  # by image path: new_luks runs in $(...), so it cannot record into a variable
   local f; for f in "$W"/luks*.img; do [[ -e "$f" ]] && losetup -j "$f" | cut -d: -f1 | xargs -r -n1 losetup -d; done
-  pkill swtpm 2>/dev/null; sleep 1; umount /dev/tpmrm0 2>/dev/null; rm -rf "$W"
+  umount /target 2>/dev/null; umount -R "$W/chroot/dev" 2>/dev/null; for d in w sys proc etc usr; do umount "$W/chroot/$d" 2>/dev/null; done; umount "$W/chroot$W" 2>/dev/null; umount "$W/chroot/var/cache" 2>/dev/null
+  rm -f /etc/systemd/system/tpm-provision.service /etc/systemd/system/multi-user.target.wants/tpm-provision.service /usr/local/sbin/tpm-provision
+  rmdir /target 2>/dev/null; pkill swtpm 2>/dev/null; sleep 1; umount /dev/tpmrm0 2>/dev/null; rm -rf "$W"
 }
 trap cleanup EXIT
 export TPM2TOOLS_TCTI="device:/dev/tpmrm0"
@@ -69,7 +71,8 @@ mkdir -p "$W/bin"; printf '#!/bin/sh\nexit 0\n' > "$W/bin/update-initramfs"; chm
 printf '#!/bin/sh\n[ -n "$BLKID_OUT" ] && printf "%%s\\n" "$BLKID_OUT"\nexit 0\n' > "$W/bin/blkid"; chmod +x "$W/bin/blkid"
 prov() {  # prov DEV [VAR=value ...] - provision.sh takes no arguments
   local dev="$1"; shift
-  env PATH="$W/bin:$PATH" DEV="$dev" "$@" bash /w/provision.sh </dev/null 2>&1
+  # SB_VAR: the host's /sys is visible in here; tests pick the Secure Boot state themselves
+  env PATH="$W/bin:$PATH" DEV="$dev" SB_VAR="$W/nosb" "$@" bash /w/provision.sh </dev/null 2>&1
 }
 nslots() { clevis luks list -d "$1" 2>/dev/null | grep -c .; }
 da() { tpm2_getcap properties-variable | sed -n "s/^[[:space:]]*$1:[[:space:]]*//p"; }
@@ -219,6 +222,130 @@ clevis luks pass -d "$L6" -s "$S6" | cryptsetup open --test-passphrase "$L6" --k
 n="$(nslots "$L6")"; out="$(env PATH="$W/bin:$PATH" CRYPTTAB="$W/crypttab" DEV="$L6" STATE="$W/state" bash /w/tpmfix.sh </dev/null 2>&1)"; rc=$?
 [[ $rc == 0 && "$(nslots "$L6")" == "$n" && "$out" == *"already unseals"* ]] \
   && ok "tpmfix phase 2 re-run: nothing added, no passphrase asked" || { bad "tpmfix re-run: rc=$rc"; echo "$out"; }
+
+# ---- installer hand-off (autoinstall late-commands): binds nothing, stages a first-boot run
+# /target bind-mounted so /proc/mounts looks like the installer's; the first boot runs with
+# STAGE pointing into that tree. systemctl is faked: it records the reboot.
+nkeys() { cryptsetup luksDump "$1" | grep -cE '^[[:space:]]+[0-9]+: luks2'; }
+printf '#!/bin/sh\necho "$*" >> "%s/systemctl.log"\n' "$W" > "$W/bin/systemctl"; chmod +x "$W/bin/systemctl"
+start_tpm; L10="$(new_luks)"
+mkdir -p "$W/root/usr/bin" /target; mount --bind "$W/root" /target
+mkdir -p "$W/root/usr/sbin"
+for t in clevis clevis-luks-bind clevis-encrypt-tpm2 tpm2_pcrread; do install -m 755 /dev/null "$W/root/usr/bin/$t"; done
+install -m 755 /dev/null "$W/root/usr/sbin/update-initramfs"   # sbin, like the real one
+out="$(prov "$L10" LUKS_PASS=wrong STAGE=/stage)"; rc=$?
+[[ $rc == 2 && ! -e "$W/root/stage/key" && "$(nkeys "$L10")" == 1 ]] \
+  && ok "installer, wrong passphrase: exit 2, nothing staged" || { bad "installer wrong pass: rc=$rc"; echo "$out"; }
+mv "$W/root/usr/bin/clevis" "$W/clevis.off"
+out="$(prov "$L10" LUKS_PASS=xxxxxx STAGE=/stage)"; rc=$?
+[[ $rc == 2 && "$out" == *"clevis missing"* && "$(nkeys "$L10")" == 1 ]] \
+  && ok "installer: clevis missing in the target: exit 2, no key slot added" || { bad "installer no clevis: rc=$rc"; echo "$out"; }
+mv "$W/clevis.off" "$W/root/usr/bin/clevis"
+out="$(prov "$L10" LUKS_PASS=xxxxxx STAGE=/stage)"; rc=$?
+[[ $rc == 0 && "$(nslots "$L10")" == 0 && "$out" == *"left to the first boot"* ]] && ok "installer (live shell): exit 0, says so, nothing bound to the TPM" || { bad "installer: rc=$rc"; echo "$out"; }
+[[ -s "$W/root/stage/key" && -x "$W/root/usr/local/sbin/tpm-provision" && "$(grep ^STAGE= "$W/root/stage/env")" == STAGE=/stage \
+   && -L "$W/root/etc/systemd/system/multi-user.target.wants/tpm-provision.service" \
+   && "$(grep ^DEV= "$W/root/stage/env")" == "DEV=/dev/disk/by-uuid/$(cryptsetup luksUUID "$L10")" ]] \
+  && ok "installer: key, script, enabled unit, env with DEV by UUID" || { bad "installer: files"; ls -lR "$W/root"; }
+cryptsetup open --test-passphrase "$L10" --key-file="$W/root/stage/key" \
+  && ok "installer: one-time key opens the disk" || bad "installer: key does not open"
+out="$(prov "$L10" LUKS_PASS=xxxxxx STAGE=/stage)"; rc=$?
+[[ $rc == 0 && "$(nkeys "$L10")" == 2 ]] && ok "installer re-run: no extra key slot" || { bad "installer re-run: rc=$rc keys=$(nkeys "$L10")"; echo "$out"; }
+umount /target
+cp "$W/root/stage/key" "$W/oldkey"
+out="$(prov "$L10" STAGE="$W/root/stage" INVOCATION_ID=t)"; rc=$?
+own="$(grep -v '^Warning: Value .* entropy range' <<<"$out")"
+[[ $rc == 0 && -z "$own" ]] && ok "first boot: exit 0 with no passphrase given" || { bad "first boot: rc=$rc"; echo "$out"; }
+clevis luks list -d "$L10" | grep -q '"pcr_ids":"7"' && ok "first boot: bound with pcr_ids 7" || bad "first boot: not bound"
+cryptsetup open --test-passphrase "$L10" --key-file="$W/oldkey" 2>/dev/null \
+  && bad "first boot: one-time key still opens the disk" || ok "first boot: one-time key slot removed"
+[[ ! -e "$W/root/stage" && "$(nkeys "$L10")" == 2 ]] \
+  && ok "first boot: stage dir gone, passphrase + TPM slot left" || bad "first boot: leftovers, keys=$(nkeys "$L10")"
+printf 'xxxxxx' | cryptsetup open --test-passphrase "$L10" --key-file=- && ok "first boot: passphrase still opens" || bad "first boot: passphrase lost"
+
+# ---- first boot, Windows left lockoutAuth: queues the clear and reboots for it (bounded)
+start_tpm; tpm2_changeauth -c l windowsSecret; L11="$(new_luks)"
+: > "$W/ppi/request"; rm -f "$W/ppi/response" "$W/systemctl.log"
+mount --bind "$W/root" /target
+prov "$L11" LUKS_PASS=xxxxxx STAGE=/stage >/dev/null; umount /target
+out="$(prov "$L11" STAGE="$W/root/stage" INVOCATION_ID=t PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && "$(cat "$W/ppi/request")" == 5 && "$(cat "$W/systemctl.log" 2>/dev/null)" == *reboot* \
+   && "$(cat "$W/root/stage/reboots")" == 1 ]] \
+  && ok "first boot, lockoutAuth set: clear queued, reboot asked" || { bad "first boot lockout: rc=$rc"; echo "$out"; }
+echo 3 > "$W/root/stage/reboots"; rm -f "$W/systemctl.log"
+out="$(prov "$L11" STAGE="$W/root/stage" INVOCATION_ID=t PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && ! -e "$W/systemctl.log" ]] && ok "first boot: no 4th reboot" || { bad "reboot loop: rc=$rc"; echo "$out"; }
+rm -f "$W/systemctl.log"
+out="$(prov "$L11" STAGE="$W/root/stage" PPI="$W/ppi")"; rc=$?
+[[ $rc == 10 && ! -e "$W/systemctl.log" ]] && ok "by hand (not systemd): never reboots" || { bad "manual reboot: rc=$rc"; echo "$out"; }
+
+# ---- curtin in-target: a chroot whose / is not PID 1's root. Binds right there, leaves the
+# first-boot check; the first boot (outside the chroot) finds the slot unseals and cleans up.
+# /dev rbind: /dev/tpmrm0 is a bind mount of the swtpm device. $W bound at the same path: the
+# fake update-initramfs and the PPI files.
+start_tpm; L12="$(new_luks)"; C="$W/chroot"
+mkdir -p "$C"/{usr,etc,dev,proc,sys,w,var/lib,tmp,run} "$C$W"
+for d in usr etc proc sys w; do mount --bind "/$d" "$C/$d"; done
+mount --rbind /dev "$C/dev"; mount --bind "$W" "$C$W"
+mkdir -p "$C/var/cache"; mount --bind /var/cache "$C/var/cache"   # clevis key generation reads the cracklib dict
+# no kernel in the container, so no initramfs-tools: the installer check wants the file present
+[[ -e /usr/sbin/update-initramfs ]] || cp "$W/bin/update-initramfs" /usr/sbin/update-initramfs
+for l in bin sbin lib lib32 lib64 libx32; do [[ -L /$l ]] && ln -sfn "$(readlink /$l)" "$C/$l"; done
+inchroot() { chroot "$C" env PATH="$W/bin:/usr/sbin:/usr/bin:/sbin:/bin" SB_VAR="$W/nosb" "$@" bash /w/provision.sh 2>&1; }
+printf 'xxxxxx\n' > "$W/luks.pass"
+out="$(inchroot DEV="$L12" LUKS_PASS_FILE="$W/luks.pass")"; rc=$?
+own="$(grep -v -e '^Warning: Value .* entropy range' -e 'Locking directory' <<<"$out")"
+[[ $rc == 0 && -z "$own" ]] && ok "in-target chroot (LUKS_PASS_FILE): exit 0, prints nothing of its own" || { bad "in-target: rc=$rc"; echo "$out"; }
+clevis luks list -d "$L12" | grep -q '"pcr_ids":"7"' && ok "in-target chroot: bound to the TPM in the installer" || bad "in-target: not bound"
+[[ -s "$C/var/lib/tpm-provision/key" && -L /etc/systemd/system/multi-user.target.wants/tpm-provision.service ]] \
+  && ok "in-target chroot: first-boot check staged" || bad "in-target: not staged"
+[[ "$(nkeys "$L12")" == 3 ]] && ok "in-target chroot: passphrase + one-time key + TPM slot" || bad "in-target: keys=$(nkeys "$L12")"
+n="$(nslots "$L12")"
+out="$(prov "$L12" STAGE="$C/var/lib/tpm-provision")"; rc=$?
+[[ $rc == 0 && "$(nslots "$L12")" == "$n" && ! -e "$C/var/lib/tpm-provision" && "$(nkeys "$L12")" == 2 ]] \
+  && ok "in-target -> first boot: slot already unseals, no rebind, one-time key removed" || { bad "in-target first boot: rc=$rc keys=$(nkeys "$L12")"; echo "$out"; }
+
+# ---- curtin in-target, Windows left lockoutAuth: clear queued, install still succeeds
+start_tpm; tpm2_changeauth -c l windowsSecret; L14="$(new_luks)"
+: > "$W/ppi/request"; rm -f "$W/ppi/response"
+out="$(inchroot DEV="$L14" LUKS_PASS=xxxxxx PPI="$W/ppi")"; rc=$?
+[[ $rc == 0 && "$(cat "$W/ppi/request")" == 5 && "$out" == *"left to the first boot"* \
+   && -s "$C/var/lib/tpm-provision/key" && "$(nslots "$L14")" == 0 ]] \
+  && ok "in-target, lockoutAuth set: clear queued, exit 0, first boot staged" || { bad "in-target lockout: rc=$rc"; echo "$out"; }
+# disk boot reads another PCR 7 than the installer did: first boot rebinds, drops the stale slot
+start_tpm; L15="$(new_luks)"; rm -rf "$C/var/lib/tpm-provision"
+inchroot DEV="$L15" LUKS_PASS=xxxxxx >/dev/null
+old="$(clevis luks list -d "$L15" | awk -F: '/pcr_ids/ { print $1 }')"
+tpm2_pcrextend 7:sha256=0000000000000000000000000000000000000000000000000000000000000002
+out="$(prov "$L15" STAGE="$C/var/lib/tpm-provision")"; rc=$?
+new="$(clevis luks list -d "$L15" | awk -F: '/pcr_ids/ { print $1 }')"
+[[ $rc == 0 && -n "$new" && "$(wc -l <<<"$new")" == 1 && "$(nkeys "$L15")" == 2 ]] && clevis luks pass -d "$L15" -s "$new" >/dev/null 2>&1 \
+  && ok "in-target, PCR 7 differs at first boot: rebound, stale slot + one-time key gone" || { bad "PCR mismatch: rc=$rc old=$old new=$new keys=$(nkeys "$L15")"; echo "$out"; }
+
+# a TPM step fails in the installer (here: a PCR bank the TPM lacks): install still succeeds
+start_tpm; L16="$(new_luks)"; rm -rf "$C/var/lib/tpm-provision"
+out="$(inchroot DEV="$L16" LUKS_PASS=xxxxxx PCR_BANK=sha384)"; rc=$?
+[[ $rc == 0 && "$out" == *"left to the first boot"* && -s "$C/var/lib/tpm-provision/key" ]] \
+  && ok "in-target, TPM step fails: exit 0, says so, first boot staged" || { bad "in-target fail: rc=$rc"; echo "$out"; }
+
+# NO_INSTALLER=1: a normal run even in a chroot
+start_tpm; L17="$(new_luks)"; rm -rf "$C/var/lib/tpm-provision"
+out="$(inchroot DEV="$L17" LUKS_PASS=xxxxxx NO_INSTALLER=1)"; rc=$?
+[[ $rc == 0 && ! -e "$C/var/lib/tpm-provision" && "$(nkeys "$L17")" == 2 ]] \
+  && ok "NO_INSTALLER=1 in a chroot: binds, stages nothing" || { bad "NO_INSTALLER: rc=$rc"; echo "$out"; }
+umount "$C/var/cache"; umount -R "$C/dev"; for d in w sys proc etc usr; do umount "$C/$d"; done; umount "$C$W"
+rm -f /etc/systemd/system/tpm-provision.service /etc/systemd/system/multi-user.target.wants/tpm-provision.service /usr/local/sbin/tpm-provision
+
+# ---- Secure Boot off: still binds (PCR 7 has a value), but says so; on: silent
+start_tpm; L13="$(new_luks)"
+printf '\x06\x00\x00\x00\x00' > "$W/sb_off"; printf '\x06\x00\x00\x00\x01' > "$W/sb_on"
+out="$(prov "$L13" LUKS_PASS=xxxxxx SB_VAR="$W/sb_off")"; rc=$?
+[[ $rc == 0 && "$out" == *"Secure Boot is off"* ]] && clevis luks list -d "$L13" | grep -q '"pcr_ids":"7"' \
+  && ok "Secure Boot off: warns, still binds" || { bad "SB off: rc=$rc"; echo "$out"; }
+out="$(prov "$L13" SB_VAR="$W/sb_on")"; rc=$?
+[[ $rc == 0 && "$out" != *"Secure Boot"* ]] && ok "Secure Boot on: no warning" || { bad "SB on: rc=$rc"; echo "$out"; }
+out="$(prov "$L13" SB_VAR="$W/sb_off" PCR_IDS=0)"; rc=$?
+[[ "$out" != *"Secure Boot"* ]] && ok "Secure Boot off, PCR 7 not used: no warning" || { bad "SB off no pcr7"; echo "$out"; }
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 (( fail == 0 ))
