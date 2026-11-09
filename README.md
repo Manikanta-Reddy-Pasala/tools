@@ -7,6 +7,7 @@ Small, self-contained sysadmin scripts. Each directory stands alone — clone th
 |---|---|
 | [`tsme6/`](tsme6/) | R&S TSME6 scanner check from a Wine/Docker box, built from the R&S manuals: network (jumbo, multicast 239.192.1.7, ports 5140/16962/17476), discovery replay, ViCom install check, TsmePing, GSM/WCDMA sample-app scans. Test guide: [`tsme6/TESTING.md`](tsme6/TESTING.md). |
 | [`tpm/`](tpm/) | TPM + LUKS auto-unlock for NUCs: `provision.sh` for a new system, `tpmfix.sh` for one already configured (clears a TPM whose lockout password is set, repairs boot). Runbook in [`tpm/README.md`](tpm/README.md). |
+| [`course/iasa-aiforge/`](course/iasa-aiforge/) | IASA Masterclass report-out on AIForge: simple 13-slide demo deck (`AIForge-IASA-Demo.pptx`, with speaker notes and a demo walk-through slide) plus the original 29-slide deck. |
 
 ## Conventions
 
