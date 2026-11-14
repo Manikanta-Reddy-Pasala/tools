@@ -99,17 +99,51 @@ function seg(s, x1, y1, x2, y2, color, width, o = {}) { // straight line between
     line: Object.assign({ color, width: width || 2 }, o), objectName: "Line" });
 }
 
+// mini sketch of each blank canvas, drawn in unit coordinates (0..1)
+function G(cols, rows, x0, y0, w, h, c) {
+  const out = [], gx = 0.03, gy = 0.07, cw = (w - (cols - 1) * gx) / cols, ch = (h - (rows - 1) * gy) / rows;
+  for (let r = 0; r < rows; r++) for (let i = 0; i < cols; i++) out.push(["r", x0 + i * (cw + gx), y0 + r * (ch + gy), cw, ch, typeof c === "function" ? c(i, r) : c]);
+  return out;
+}
+const DOT = (x, y, c) => ["o", x, y, 0.038, 0.13, c];
+const THUMBS = {
+  bmc: [...G(1, 1, 0, 0, 0.18, 0.68, "l"), ...G(1, 2, 0.21, 0, 0.18, 0.68, "l"), ["r", 0.42, 0, 0.16, 0.68, "y"], ...G(1, 2, 0.61, 0, 0.18, 0.68, "l"), ...G(1, 1, 0.82, 0, 0.18, 0.68, "l"), ...G(2, 1, 0, 0.76, 1, 0.24, "w")],
+  persona: [["o", 0.04, 0.06, 0.2, 0.68, "l"], ["r", 0.06, 0.84, 0.16, 0.14, "y"], ...G(2, 2, 0.34, 0, 0.66, 1, "l")],
+  journey: [...G(5, 1, 0, 0, 1, 0.22, "w"), DOT(0.08, 0.46, "y"), DOT(0.28, 0.32, "y"), DOT(0.48, 0.46, "y"), DOT(0.68, 0.36, "y"), DOT(0.88, 0.3, "y"), ...G(5, 1, 0, 0.72, 1, 0.28, "l")],
+  grid: [...G(2, 2, 0.2, 0, 0.6, 1, (i, r) => (i === 1 && r === 0 ? "y" : "l")), DOT(0.3, 0.16, "o"), DOT(0.62, 0.2, "t"), DOT(0.66, 0.7, "o"), DOT(0.34, 0.68, "t")],
+  usecase: [["o", 0.02, 0.22, 0.17, 0.58, "l"], ["r", 0.24, 0.44, 0.09, 0.12, "y"], ["r", 0.38, 0, 0.3, 1, "l"], ...[0, 1, 2, 3].map((i) => ["r", 0.41, 0.12 + i * 0.21, 0.24, 0.09, "t"]), ["r", 0.72, 0.44, 0.09, 0.12, "y"], ["r", 0.84, 0.15, 0.16, 0.7, "y"]],
+  context: [...G(1, 3, 0, 0, 0.24, 1, "l"), ["r", 0.28, 0.44, 0.07, 0.12, "y"], ["r", 0.39, 0.05, 0.22, 0.9, "y"], ["r", 0.65, 0.44, 0.07, 0.12, "y"], ...G(1, 3, 0.76, 0, 0.24, 1, "l")],
+  blueprint: [...G(4, 3, 0, 0, 1, 0.54, "w"), ["r", 0, 0.59, 1, 0.04, "o"], ...G(4, 2, 0, 0.68, 1, 0.32, "l")],
+  capmap: G(6, 4, 0, 0, 1, 1, (i, r) => (r === 0 ? "w" : (i + r) % 4 === 0 ? "y" : "l")),
+  capcard: [["r", 0, 0, 1, 0.22, "w"], ...G(3, 1, 0, 0.3, 1, 0.42, "l"), ["r", 0, 0.8, 1, 0.2, "o"]],
+  asr: [...G(3, 1, 0, 0, 1, 1, "l"), ...[0, 1, 2].map((i) => ["r", 0.2 + i * 0.343, 0.1, 0.1, 0.13, "o"])],
+  qatt: [...G(6, 1, 0, 0, 1, 0.4, (i) => (i === 5 ? "o" : "l")), ...G(3, 1, 0, 0.52, 1, 0.48, "w")],
+  adr: [["r", 0, 0, 1, 0.2, "w"], ...G(4, 1, 0, 0.27, 1, 0.33, (i) => (i === 3 ? "y" : "l")), ...G(3, 1, 0, 0.67, 1, 0.33, "w")],
+  okr: [["r", 0, 0, 1, 0.22, "y"], ...[0, 1, 2, 3].flatMap((i) => [["r", 0, 0.32 + i * 0.18, 0.4, 0.1, "l"], ["r", 0.45, 0.32 + i * 0.18, 0.55, 0.1, "w"], ["r", 0.45, 0.32 + i * 0.18, 0.55 * [0.2, 0.5, 0.35, 1][i], 0.1, "o"]])],
+  roadmap: [...G(4, 1, 0.16, 0, 0.84, 0.2, "y"), ...[0, 1, 2].flatMap((r) => [["r", 0, 0.27 + r * 0.25, 0.13, 0.2, "o"], ...G(4, 1, 0.16, 0.27 + r * 0.25, 0.84, 0.2, r === 1 ? "l" : "w")])],
+};
+function thumb(s, kind, x, y, w, h) {
+  const col = { l: C.accent3, y: C.accent2, o: C.accent4, w: C.background1, t: C.accent1 };
+  THUMBS[kind].forEach(([sh, fx, fy, fw, fh, c]) => {
+    if (sh === "o") s.addShape(SH.OVAL, { x: x + fx * w, y: y + fy * h, w: fw * w, h: fh * h, fill: { color: col[c] }, objectName: "Sketch" });
+    else s.addShape(SH.ROUNDED_RECTANGLE, { x: x + fx * w, y: y + fy * h, w: fw * w, h: fh * h, fill: { color: col[c] }, rectRadius: 0.02, objectName: "Sketch" });
+  });
+}
+
 // canvas slide frame: left = what the canvas is, right = the canvas itself filled for AIForge
 const AX = 4.25, AY = 1.9, AW = 8.48, AH = 4.05;
 function canvasSlide(o) {
   const s = content(o.section, o.name, [{ text: "It answers:  ", options: { bold: true, color: C.accent1 } }, { text: o.q }]);
   sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
   s.addShape(SH.ROUNDED_RECTANGLE, { x: 0.6, y: AY, w: 3.4, h: AH, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "About the canvas" });
-  txt(s, "WHAT IT IS", { x: 0.85, y: AY + 0.2, w: 2.9, h: 0.28, fontSize: 11, bold: true, color: C.accent2, charSpacing: 1.5 });
-  txt(s, o.what, { x: 0.85, y: AY + 0.5, w: 2.9, h: 0.95, fontSize: 15, color: C.background1 });
-  txt(s, "HOW IT HELPS", { x: 0.85, y: AY + 1.55, w: 2.9, h: 0.28, fontSize: 11, bold: true, color: C.accent2, charSpacing: 1.5 });
+  const lab = (t, y) => txt(s, t, { x: 0.85, y: AY + y, w: 2.9, h: 0.26, fontSize: 11, bold: true, color: C.accent2, charSpacing: 1.5 });
+  lab("WHAT IT IS", 0.18);
+  txt(s, o.what, { x: 0.85, y: AY + 0.45, w: 2.9, h: 0.8, fontSize: 15, color: C.background1 });
+  lab("THE BLANK CANVAS", 1.38);
+  thumb(s, o.thumb, 0.85, AY + 1.67, 2.9, 0.76);
+  lab("WHY USE IT", 2.6);
   txt(s, o.helps.map((t, i) => ({ text: t, options: { bullet: { indent: 14 }, breakLine: i < o.helps.length - 1 } })),
-    { x: 0.85, y: AY + 1.85, w: 2.9, h: 2.05, fontSize: 14, color: C.background1, paraSpaceAfter: 6 });
+    { x: 0.85, y: AY + 2.86, w: 2.9, h: 1.1, fontSize: 14, color: C.background1, paraSpaceAfter: 5 });
   inShort(s, o.short);
   s.addNotes(o.notes);
   return s;
@@ -144,24 +178,34 @@ pres.addSection({ title: S1 });
 {
   const s = content(S1, "How canvases help", "Six reasons to fill a one-page canvas instead of writing a long document");
   sticky(s, "Start here", "Why bother?");
+  const R = (x, y, w, h, fill, o = {}) => s.addShape(SH.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: fill }, rectRadius: 0.03, line: { color: o.line || HEX.accent6, width: o.lw === undefined ? 0.75 : o.lw, dashType: o.dash || "solid" }, objectName: "Picture" });
+  const pics = [
+    (x, y) => { [0, 1, 2].forEach((i) => R(x + i * 0.07, y + 0.14 - i * 0.07, 0.42, 0.56, C.background2)); arrow(s, x + 0.66, y + 0.27, 0.22, 0.22, C.accent4); R(x + 0.96, y + 0.07, 0.42, 0.56, C.accent2, { line: HEX.accent4, lw: 1.25 }); },
+    (x, y) => { [0, 1, 2, 3].forEach((i) => R(x, y + 0.08 + i * 0.16, i === 3 ? 0.3 : 0.5, 0.07, C.accent6, { lw: 0 })); arrow(s, x + 0.6, y + 0.27, 0.22, 0.22, C.accent4); R(x + 0.9, y + 0.05, 0.48, 0.62, C.background1, { line: HEX.accent1, lw: 1.25 }); R(x + 0.96, y + 0.11, 0.16, 0.5, C.accent3, { lw: 0 }); R(x + 1.16, y + 0.11, 0.16, 0.22, C.accent2, { lw: 0 }); R(x + 1.16, y + 0.39, 0.16, 0.22, C.accent3, { lw: 0 }); },
+    (x, y) => { R(x, y, 1.38, 0.72, C.background2); [[0.1, 0.1, C.accent2], [0.42, 0.16, C.accent3], [0.78, 0.08, C.accent2], [0.24, 0.42, C.accent3], [0.6, 0.44, C.accent2], [1.0, 0.4, C.accent4]].forEach(([dx, dy, c]) => R(x + dx, y + dy, 0.24, 0.22, c, { lw: 0 })); },
+    (x, y) => { [0, 1, 2].forEach((i) => { R(x + i * 0.52, y + 0.2, 0.34, 0.34, i === 2 ? C.accent2 : C.accent3, { line: HEX.accent1 }); if (i < 2) arrow(s, x + i * 0.52 + 0.36, y + 0.29, 0.14, 0.16, C.accent4); }); },
+    (x, y) => { seg(s, x + 0.15, y + 0.36, x + 1.23, y + 0.36, HEX.accent6, 2); [C.accent1, C.accent4, C.accent5].forEach((c, i) => s.addShape(SH.OVAL, { x: x + i * 0.54, y: y + 0.21, w: 0.3, h: 0.3, fill: { color: c }, objectName: "Picture" })); },
+    (x, y) => { for (let r = 0; r < 2; r++) for (let i = 0; i < 3; i++) { const gap = r === 1 && i === 1; R(x + i * 0.47, y + 0.04 + r * 0.35, 0.42, 0.3, gap ? C.background1 : C.accent3, gap ? { line: HEX.accent4, lw: 1.5, dash: "dash" } : { lw: 0 }); } },
+  ];
   const items = [
-    ["One page, not a document", "A single page gets read and kept up to date. A fifty-page document does neither."],
-    ["A picture beats a paragraph", "Words alone are ambiguous. A box you must fill forces a clear answer."],
-    ["Everyone works on one wall", "Print it, pin it up, fill it with sticky notes. The whole team sees the same thing."],
-    ["Each canvas feeds the next", "The persona drives the journey; the journey drives the requirements. Cause and effect."],
-    ["Decisions stay traceable", "Requirement, decision, measure — linked. Nobody re-argues the choice next year."],
-    ["Gaps show up early", "An empty box is a question nobody has answered yet. Better found now than in the build."],
+    ["One page, not a book", "One page gets read. Fifty pages do not."],
+    ["A picture beats words", "A box you must fill forces a clear answer."],
+    ["Everyone sees one wall", "Pin it up. Fill it together with sticky notes."],
+    ["Each canvas feeds the next", "The person shapes the journey; the journey shapes the rules."],
+    ["Choices can be traced", "Rule, choice, number — linked. No arguing again later."],
+    ["Gaps show up early", "An empty box is a question nobody has answered."],
   ];
   items.forEach(([h, b], i) => {
     const col = i % 3, row = Math.floor(i / 3);
     const x = 0.6 + col * 4.13, y = 1.95 + row * 2.03;
     box(s, x, y, 3.83, 1.83, { name: "Reason card" });
-    num(s, x + 0.25, y + 0.25, i + 1, 0.55, row === 0 ? C.accent1 : C.accent4);
-    txt(s, h, { x: x + 0.95, y: y + 0.22, w: 2.7, h: 0.6, fontSize: 18, bold: true, color: C.text2, valign: "middle" });
-    txt(s, b, { x: x + 0.25, y: y + 0.92, w: 3.35, h: 0.85, fontSize: 14 });
+    num(s, x + 0.25, y + 0.22, i + 1, 0.5, row === 0 ? C.accent1 : C.accent4);
+    txt(s, h, { x: x + 0.9, y: y + 0.22, w: 2.8, h: 0.5, fontSize: 17, bold: true, color: C.text2, valign: "middle" });
+    txt(s, b, { x: x + 0.25, y: y + 0.88, w: 1.85, h: 0.85, fontSize: 13 });
+    pics[i](x + 2.25, y + 0.92);
   });
-  inShort(s, "a canvas is a one-page question sheet. Fill the boxes and the argument can be checked.");
-  s.addNotes("These six points come from the IASA toolkit lesson: least documentation, visual thinking, facilitation on a wall, connected concepts, decision traceability, and finding structural problems early.");
+  inShort(s, "a canvas is a one-page question sheet. Fill the boxes and anyone can check the thinking.");
+  s.addNotes("These six points come from the IASA toolkit lesson: least documentation, visual thinking, working together on a wall, connected ideas, traceable decisions, and finding problems early.");
 }
 
 // ---------- 3. The canvases at a glance ----------
@@ -221,6 +265,40 @@ const STAGES = [
   s.addNotes("AIForge works in a defence setting where cloud AI is not allowed, so it runs on hardware we own. That one fact shows up on almost every canvas.");
 }
 
+// ---------- 5. How AIForge works inside ----------
+{
+  const s = content(S1, "How AIForge works inside", "Seven small AI agents, each with one small job, in order");
+  sticky(s, "Running example", "The agent line");
+  const roles = [["Enhancer", "makes the ticket clear"], ["Architect", "splits the work, writes one plan"], ["Senior dev", "sets the shape of the code"], ["Developer", "writes each part"], ["Tester", "writes and runs tests"], ["Reviewer", "a second AI checks"], ["Joiner", "joins it all, builds until it passes"]];
+  const w = 1.55, gap = (12.13 - 7 * w) / 6;
+  roles.forEach(([r, d], i) => {
+    const x = 0.6 + i * (w + gap);
+    box(s, x, 1.95, w, 1.75, { name: "Agent" });
+    num(s, x + w / 2 - 0.22, 2.05, i + 1, 0.44, i === 5 ? C.accent4 : C.accent1);
+    txt(s, r, { x: x + 0.08, y: 2.55, w: w - 0.16, h: 0.35, fontSize: 15, bold: true, color: C.text2, align: "center" });
+    txt(s, d, { x: x + 0.1, y: 2.92, w: w - 0.2, h: 0.72, fontSize: 12.5, align: "center" });
+    if (i < 6) arrow(s, x + w + gap / 2 - 0.09, 2.72, 0.18, 0.22, C.accent4);
+  });
+  // why split: one big job does not fit, small jobs do
+  box(s, 0.6, 3.9, 12.13, 2.05, { fill: C.accent2, lineColor: HEX.accent2, name: "Why split" });
+  txt(s, "Why split the work?", { x: 0.85, y: 4.02, w: 3.4, h: 0.4, fontSize: 18, bold: true, color: C.text2 });
+  txt(s, "A local AI model can hold only 3–5 files in mind at once (the dashed box). One big job does not fit. Small jobs do.", { x: 0.85, y: 4.45, w: 3.4, h: 1.4, fontSize: 14 });
+  const frame = (x, label) => {
+    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 4.4, w: 1.5, h: 0.8, fill: { color: C.background1, transparency: 100 }, rectRadius: 0.05, line: { color: HEX.dk2, width: 2, dashType: "dash" }, objectName: "What the model can hold" });
+    txt(s, label, { x: x - 0.6, y: 5.5, w: 2.7, h: 0.3, fontSize: 12.5, bold: true, color: C.text2, align: "center" });
+  };
+  s.addShape(SH.ROUNDED_RECTANGLE, { x: 4.95, y: 4.1, w: 2.5, h: 1.3, fill: { color: C.accent4 }, rectRadius: 0.06, objectName: "Big job" });
+  txt(s, "12 files", { x: 4.95, y: 4.1, w: 2.5, h: 1.3, fontSize: 16, bold: true, color: C.background1, align: "center", valign: "middle" });
+  frame(5.45, "One big job: does not fit");
+  s.addShape(SH.ROUNDED_RECTANGLE, { x: 9.3, y: 4.25, w: 2.1, h: 1.1, fill: { color: C.background1 }, rectRadius: 0.06, objectName: "Room to spare" });
+  s.addShape(SH.ROUNDED_RECTANGLE, { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fill: { color: C.accent5 }, rectRadius: 0.05, objectName: "Small job" });
+  txt(s, "3 files", { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle" });
+  frame(9.6, "One small job: fits");
+  arrow(s, 8.05, 4.75, 0.6, 0.45, C.text2);
+  inShort(s, "one shared plan first, tests before code, and nothing is merged unless it builds.");
+  s.addNotes("Simple tickets skip most of this line; only real multi-file work runs all seven steps. The yellow panel is the key idea: same models, same machines — only the way the work was cut up changed.");
+}
+
 // =====================================================================
 // PART 2 — canvases
 // =====================================================================
@@ -229,8 +307,8 @@ pres.addSection({ title: S2 });
 // ---------- 5. Business Model Canvas ----------
 {
   const s = canvasSlide({ section: S2, n: 1, stage: "Why?", name: "Business Model Canvas", q: "how does this create value, and for whom?",
-    what: "Nine boxes that show how a product or service earns its keep.",
-    helps: ["The whole business case on one page", "Shows who benefits and what it costs", "Starts the chain: segments become personas"],
+    thumb: "bmc", what: "Nine boxes that show how something earns its keep.",
+    helps: ["Whole case on one page", "Shows who gains, what it costs"],
     short: "AIForge sells nothing. It gives senior hours back, inside our own walls.",
     notes: "This is the internal-product view of the business model: the 'customers' are our own engineers and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
   const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
@@ -250,8 +328,8 @@ pres.addSection({ title: S2 });
 // ---------- 6. Persona Card ----------
 {
   const s = canvasSlide({ section: S2, n: 2, stage: "Who?", name: "Persona Card", q: "who exactly are we building for?",
-    what: "A one-page picture of one real kind of user, in their own words.",
-    helps: ["Stops “the user” meaning everyone", "Their objection is part of the person", "Drives the journey and the requirements"],
+    thumb: "persona", what: "One page about one real kind of user, in their own words.",
+    helps: ["Stops “the user” meaning everyone", "Shows what they fear, too"],
     short: "it is built for the delivery engineer. If their day does not change, nothing else matters.",
     notes: "Three personas exist: delivery engineer (primary), junior developer, engineering lead. Only the primary one is drawn. Honest adoption test: do they file a ticket, or still walk over to a senior? Today, mostly the second." });
   box(s, AX, AY, AW, AH, { name: "Persona card" });
@@ -275,8 +353,8 @@ pres.addSection({ title: S2 });
 // ---------- 7. Customer Journey Map ----------
 {
   const s = canvasSlide({ section: S2, n: 3, stage: "Who?", name: "Customer Journey Map", q: "where does the person wait, and how does it feel?",
-    what: "The steps a person goes through, with how each step feels.",
-    helps: ["Finds the wait, not just the step", "Before and after sit side by side", "Shows the moment that matters"],
+    thumb: "journey", what: "The steps a person goes through, and how each step feels.",
+    helps: ["Finds where people wait", "Shows before and after"],
     short: "the cost was never the typing — it was the waiting. AIForge removes the wait.",
     notes: "Read the orange line first (today), then the green one (with AIForge). The person now joins at the pull request, not before it." });
   const lw = 1.3, cw = (AW - lw) / 5, x0 = AX + lw;
@@ -311,8 +389,8 @@ pres.addSection({ title: S2 });
 // ---------- 8. Power / Interest Grid ----------
 {
   const s = canvasSlide({ section: S2, n: 4, stage: "Who?", name: "Power / Interest Grid", q: "who must we win over, and who must own it?",
-    what: "A two-by-two: each group placed by its say and its stake.",
-    helps: ["Shows where each group stands today", "Arrows show where they need to be", "Turns “people issues” into named moves"],
+    thumb: "grid", what: "A two-by-two: each group placed by its say and its stake.",
+    helps: ["Shows who stands where", "Shows who must move"],
     short: "the tool works. What is left is people — three jobs still have no owner.",
     notes: "Positions are our reading of where each group stands today; the arrows are the moves the roadmap needs. IT operations must go from watching to owning the model service; QA must own the test gate on AI pull requests; the platform needs a second operator." });
   const gx = AX + 0.45, gy = AY, gw = 5.3, gh = 3.6, qw = gw / 2, qh = gh / 2;
@@ -346,8 +424,8 @@ pres.addSection({ title: S3 });
 // ---------- 9. Use Case Card ----------
 {
   const s = canvasSlide({ section: S3, n: 5, stage: "What?", name: "Use Case Card", q: "who starts it, what happens, and what comes out?",
-    what: "One job the system does, told as actor, trigger, steps and outcome.",
-    helps: ["Names the actor and the trigger", "Says what must be true before it starts", "Ends in an outcome you can check"],
+    thumb: "usecase", what: "One job the system does, told as a short story.",
+    helps: ["Names who starts it", "Ends in a result you can check"],
     short: "the senior spends minutes reading instead of hours writing.",
     notes: "The use case is 'one small change'. Simple tickets skip most of the seven steps; only real multi-file work runs them all." });
   const c1 = 2.45, c2 = 3.55, c3 = AW - c1 - c2 - 0.7;
@@ -359,12 +437,12 @@ pres.addSection({ title: S3 });
   cell(s, AX, AY + 2.05, c1, AH - 2.05, "MUST ALREADY BE TRUE", [
     { text: "The ticket names a real project", options: { bullet: { indent: 12 }, breakLine: true } },
     { text: "The models are loaded and warm", options: { bullet: { indent: 12 }, breakLine: true } },
-    { text: "The repo builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12.5 });
+    { text: "The code builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12.5 });
   arrow(s, AX + c1 + 0.03, AY + AH / 2 - 0.15, 0.3, 0.3);
   const fx = AX + c1 + 0.35;
   box(s, fx, AY, c2, AH, { name: "Main flow" });
   txt(s, "MAIN FLOW", { x: fx + 0.11, y: AY + 0.07, w: c2 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
-  const flow = ["Someone files a ticket in plain words", "The ticket is rewritten so it is clear", "The work is split; a shared spec is written", "Each part is built in its own copy of the repo", "Tests are written, then run against the build", "A second model reviews the change", "A pull request opens with an honest verdict"];
+  const flow = ["Someone files a ticket in plain words", "The ticket is rewritten so it is clear", "The work is split; one shared plan is written", "Each part is built in its own copy of the code", "Tests are written, then run against the build", "A second model reviews the change", "A pull request opens with an honest verdict"];
   flow.forEach((t, i) => {
     const y = AY + 0.4 + i * 0.515;
     num(s, fx + 0.12, y + 0.07, i + 1, 0.34, i === 6 ? C.accent4 : C.accent1);
@@ -381,14 +459,14 @@ pres.addSection({ title: S3 });
 // ---------- 10. Context View ----------
 {
   const s = canvasSlide({ section: S3, n: 6, stage: "What?", name: "Context View", q: "what is inside the system, and what does it touch?",
-    what: "The system as one box, with everything that goes in and comes out.",
-    helps: ["Draws the boundary everyone argues about", "Lists assumptions next to the boxes", "Makes the risks at the edges visible"],
+    thumb: "context", what: "The system as one box, with what goes in and what comes out.",
+    helps: ["Draws the edge of the system", "Lists the risks at that edge"],
     short: "write the unknowns down, not just the boxes — the edges are where runs fail.",
     notes: "The dashed line is the system boundary. Everything inside runs on hardware we own. The assumptions and warnings below matter as much as the diagram." });
   const iw = 2.3, cwid = 2.6, cx = AX + iw + 0.64, ox = cx + cwid + 0.64, th = 2.3;
   txt(s, "GOES IN", { x: AX, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   txt(s, "COMES OUT", { x: ox, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
-  const ins = ["Tickets from the tracker", "The repo and its history", "Past runs and lessons"], outs = ["A pull request", "A run history for audit", "New lessons stored"];
+  const ins = ["Tickets from the tracker", "The code and its history", "Past runs and lessons"], outs = ["A pull request", "A run history for audit", "New lessons stored"];
   ins.forEach((t, i) => cell(s, AX, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.teal }));
   outs.forEach((t, i) => cell(s, ox, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.green, lineColor: HEX.accent5 }));
   arrow(s, AX + iw + 0.12, AY + 1.0, 0.4, 0.4);
@@ -407,8 +485,8 @@ pres.addSection({ title: S3 });
 // ---------- 11. Service Blueprint ----------
 {
   const s = canvasSlide({ section: S3, n: 7, stage: "What?", name: "Service Blueprint", q: "what does the person see, and what runs behind it?",
-    what: "The service drawn in lanes: what the person sees on top, the machinery below.",
-    helps: ["The line of visibility is the point", "Shows who does what at each stage", "Finds work nobody owns"],
+    thumb: "blueprint", what: "The service in layers: what people see on top, the machinery below.",
+    helps: ["Shows what stays hidden", "Finds work nobody owns"],
     short: "above the line there are two moments: file it, read it. The design work is all below.",
     notes: "Everything below the dashed line runs without anyone watching. In a live demo, the progress panel shows the 'back stage' row as it happens." });
   const lw = 1.55, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.6, pitch = 0.65;
@@ -419,9 +497,9 @@ pres.addSection({ title: S3 });
   const rows = [
     ["The person sees", ["the ticket they wrote", "a run in progress", "test output", "a pull request and a verdict"], C.background1, C.accent1],
     ["The person does", ["files it, in plain words", "nothing — goes elsewhere", "nothing", "reads, comments, merges"], C.background1, C.accent1],
-    ["Front stage", ["ticket is picked up", "branch and worktree open", "compile gate runs", "pull request opens"], TINT.teal, C.accent1],
-    ["Back stage: agents", ["enhance and clarify", "plan, spec, write", "test, review, reconcile", "write the verdict"], C.accent3, C.text2],
-    ["Platform", ["ticket store and routing", "model service on our GPUs", "build tools, test runners", "run history, lessons kept"], C.accent3, C.text2],
+    ["The system shows", ["ticket is picked up", "a copy of the code opens", "build check runs", "pull request opens"], TINT.teal, C.accent1],
+    ["Agents (hidden)", ["make the ticket clear", "plan, then write", "test, review, join up", "write the verdict"], C.accent3, C.text2],
+    ["Platform (hidden)", ["ticket store", "model service on our GPUs", "build tools, test runners", "run history, lessons kept"], C.accent3, C.text2],
   ];
   rows.forEach(([label, vals, fill, col], r) => {
     const y = AY + 0.47 + r * pitch + (r > 2 ? 0.3 : 0);
@@ -436,17 +514,17 @@ pres.addSection({ title: S3 });
 // ---------- 12. Business Capability Map ----------
 {
   const s = canvasSlide({ section: S3, n: 8, stage: "What?", name: "Business Capability Map", q: "what must the business be good at — and who does it today?",
-    what: "A grid of everything the business must be able to do. What, never how.",
-    helps: ["One view of the whole job, end to end", "Colour shows where help already lands", "The uncoloured boxes are the plan"],
+    thumb: "capmap", what: "A grid of everything the business must be able to do.",
+    helps: ["The whole job in one view", "Colour shows what is covered"],
     short: "11 of 18 done by AIForge today, 3 partly. The rest is an ownership gap.",
     notes: "Blue = AIForge does this today. Yellow = partly, being built. White = still all people. The white boxes are mostly about ownership: prioritising, merging, measuring." });
   const cw = AW / 6;
   const D = "d", P = "p", H = "h";
   const cols = [
     ["Understand demand", [["Capture a ticket", H], ["Clarify what is wanted", D], ["Prioritise", H]]],
-    ["Design the change", [["Read the codebase", D], ["Split the work", D], ["Agree the contract", D]]],
-    ["Build the change", [["Write the code", D], ["Wire files together", D], ["Keep to standards", P]]],
-    ["Prove quality", [["Write tests", D], ["Run the build", D], ["Second-pair review", D]]],
+    ["Design the change", [["Read the codebase", D], ["Split the work", D], ["Agree how parts connect", D]]],
+    ["Build the change", [["Write the code", D], ["Join files together", D], ["Keep to standards", P]]],
+    ["Prove quality", [["Write tests", D], ["Run the build", D], ["Second check", D]]],
     ["Release and operate", [["Open a pull request", D], ["Merge", H], ["Run the platform", P]]],
     ["Learn and improve", [["Keep lessons", D], ["Share across the team", P], ["Measure adoption", H]]],
   ];
@@ -467,15 +545,15 @@ pres.addSection({ title: S3 });
 
 // ---------- 13. Capability Card ----------
 {
-  const s = canvasSlide({ section: S3, n: 9, stage: "What?", name: "Capability Card", q: "what does one capability need — people, process, technology?",
-    what: "One capability taken apart: who supports it, how it runs, how mature it is.",
-    helps: ["People, process, technology — in that order", "A maturity level you can argue about", "The gap to target becomes the to-do list"],
+  const s = canvasSlide({ section: S3, n: 9, stage: "What?", name: "Capability Card", q: "what does one ability need — people, process, tools?",
+    thumb: "capcard", what: "One ability taken apart: people, process and tools.",
+    helps: ["Shows how mature it is", "The gap becomes the to-do list"],
     short: "raise it with bigger local models, shared memory, and a named owner for the platform.",
     notes: "This card is for the capability 'Build the change'. Maturity today is Good. The weakest link overall is memory: it works, but sharing it across the team is only now being built." });
   box(s, AX, AY, AW, 0.78, { name: "Capability header" });
-  txt(s, [{ text: "BUILD THE CHANGE", options: { fontSize: 11, bold: true, color: C.accent1, breakLine: true } }, { text: "Turn an agreed spec into code that compiles and fits the repo it lands in." }],
+  txt(s, [{ text: "BUILD THE CHANGE", options: { fontSize: 11, bold: true, color: C.accent1, breakLine: true } }, { text: "Turn an agreed plan into code that builds and fits the project." }],
     { x: AX + 0.15, y: AY, w: 5.0, h: 0.78, fontSize: 13, valign: "middle" });
-  txt(s, "MATURITY", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
+  txt(s, "HOW MATURE", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
   ["Growing", "Good", "Strong"].forEach((t, i) => {
     const on = i === 1;
     s.addShape(SH.ROUNDED_RECTANGLE, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
@@ -484,8 +562,8 @@ pres.addSection({ title: S3 });
   const cw = (AW - 0.24) / 3, cy = AY + 0.9, ch = 2.15;
   const cols = [
     ["People", ["One platform operator today", "Delivery engineer reviews the output", "Nobody named for the model service"], C.accent1],
-    ["Process", ["Spec and contract written before code", "Each part built in its own worktree", "Only compiling code reaches a merge"], C.text2],
-    ["Technology", ["Local models on hardware we own", "Repo map and past-run memory", "Build and test tools already in use"], C.accent5],
+    ["Process", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is merged"], C.text2],
+    ["Tools", ["Local models on hardware we own", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
   ];
   cols.forEach(([h, items, col], i) => {
     const x = AX + i * (cw + 0.12);
@@ -504,41 +582,45 @@ pres.addSection({ title: S3 });
 
 pres.addSection({ title: S4 });
 
-// ---------- 14. ASR Card ----------
+// ---------- ASR Card ----------
 {
-  const s = canvasSlide({ section: S4, n: 10, stage: "How?", name: "ASR Card", q: "which few requirements shape the whole design?",
-    what: "ASR = architecturally significant requirement: a rule the design cannot break.",
-    helps: ["Picks the few rules that really matter", "States the risk next to the rule", "Each one later needs a decision and a measure"],
-    short: "three rules shaped every design choice. Break any one and the tool is not worth using.",
-    notes: "Each card states the requirement, how critical it is, what it risks or costs, and the proof that it holds. These three cards drive the decision record and the QATT card that follow." });
-  const cw = (AW - 0.24) / 3;
+  const s = canvasSlide({ section: S4, n: 10, stage: "How?", name: "ASR Card", q: "which few rules shape the whole design?",
+    thumb: "asr", what: "ASR = a must-have rule. Break it and the whole design fails.",
+    helps: ["Picks the few rules that matter", "Puts the risk next to the rule"],
+    short: "three rules hold up the whole design. Break any one and the tool is not worth using.",
+    notes: "ASR stands for architecturally significant requirement. Each card states the rule, how critical it is, what it risks or costs, and the proof that it holds. Picture them as three pillars: take one away and the roof falls. These cards drive the decision record and the QATT card that follow." });
+  s.addShape(SH.ISOSCELES_TRIANGLE, { x: AX, y: AY, w: AW, h: 0.42, fill: { color: C.text2 }, objectName: "Roof" });
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY + 0.42, w: AW, h: 0.4, fill: { color: C.text2 }, objectName: "Beam" });
+  txt(s, "THE WHOLE AIFORGE DESIGN RESTS ON THREE RULES", { x: AX, y: AY + 0.42, w: AW, h: 0.4, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle", charSpacing: 1.5 });
+  const cw = 2.5, sp = (AW - 3 * cw) / 4, py = AY + 0.82, ph = AH - 0.82 - 0.14;
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY + AH - 0.14, w: AW, h: 0.14, fill: { color: C.accent6 }, objectName: "Ground" });
   const asr = [
-    ["Do the job on its own", "Ticket in, pull request out. Nobody in the middle.", "RISK", "Bad automatic pull requests destroy trust fast.", "The first full run went from ticket to pull request with no help.", "HIGH"],
-    ["Make the files fit together", "Change five files and they still build as one piece.", "RISK", "Without it, big tickets look done and do not compile.", "0 working linked lines → 53, once a shared spec was added.", "HIGH"],
-    ["Stay on our machines", "Hardware we own. No cloud. Works with the internet off.", "COST", "Local models are weaker than hosted ones.", "Zero runs have sent data outside our network.", "MEDIUM-HIGH"],
+    ["Do the job on its own", "Ticket in, pull request out. Nobody in the middle.", "RISK", "Bad automatic changes destroy trust fast.", "First full run: ticket to pull request with no help.", "HIGH"],
+    ["Make the files fit together", "Change five files and they still build as one.", "RISK", "Big tickets look done but do not build.", "0 → 53 working linked lines with a shared plan.", "HIGH"],
+    ["Stay on our machines", "Hardware we own. No cloud. Works offline.", "COST", "Local models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
   ];
   asr.forEach(([h, b, rl, rk, p, lvl], i) => {
-    const x = AX + i * (cw + 0.12), hi = lvl === "HIGH";
-    box(s, x, AY, cw, AH, { name: "ASR card" });
-    num(s, x + 0.15, AY + 0.15, i + 1, 0.45);
-    pill(s, x + cw - 1.45, AY + 0.2, 1.3, 0.34, lvl, hi ? C.accent4 : C.accent2, hi ? C.background1 : C.text1);
-    txt(s, h, { x: x + 0.15, y: AY + 0.7, w: cw - 0.3, h: 0.62, fontSize: 16, bold: true, color: C.text2, valign: "middle" });
-    txt(s, b, { x: x + 0.15, y: AY + 1.36, w: cw - 0.3, h: 0.66, fontSize: 12.5 });
-    txt(s, [{ text: rl + "  ", options: { bold: true, color: C.accent4, fontSize: 11 } }, { text: rk }], { x: x + 0.15, y: AY + 2.06, w: cw - 0.3, h: 0.68, fontSize: 12.5 });
-    box(s, x + 0.12, AY + 2.86, cw - 0.24, AH - 2.98, { fill: TINT.green, lineColor: TINT.green, name: "Proof" });
-    txt(s, [{ text: "PROOF", options: { bold: true, color: C.accent5, fontSize: 11, breakLine: true } }, { text: p }], { x: x + 0.22, y: AY + 2.91, w: cw - 0.44, h: AH - 3.08, fontSize: 12.5, valign: "middle" });
+    const x = AX + sp + i * (cw + sp), hi = lvl === "HIGH";
+    box(s, x, py, cw, ph, { r: 0.02, name: "Pillar" });
+    num(s, x + 0.12, py + 0.1, i + 1, 0.4);
+    pill(s, x + cw - 1.42, py + 0.14, 1.3, 0.32, lvl, hi ? C.accent4 : C.accent2, hi ? C.background1 : C.text1);
+    txt(s, h, { x: x + 0.12, y: py + 0.56, w: cw - 0.24, h: 0.52, fontSize: 14.5, bold: true, color: C.text2, valign: "middle" });
+    txt(s, b, { x: x + 0.12, y: py + 1.1, w: cw - 0.24, h: 0.5, fontSize: 12 });
+    txt(s, [{ text: rl + "  ", options: { bold: true, color: C.accent4, fontSize: 11 } }, { text: rk }], { x: x + 0.12, y: py + 1.62, w: cw - 0.24, h: 0.5, fontSize: 12 });
+    box(s, x + 0.1, py + 2.2, cw - 0.2, ph - 2.3, { fill: TINT.green, lineColor: TINT.green, name: "Proof" });
+    txt(s, [{ text: "PROOF  ", options: { bold: true, color: C.accent5, fontSize: 11 } }, { text: p }], { x: x + 0.18, y: py + 2.2, w: cw - 0.36, h: ph - 2.3, fontSize: 12, valign: "middle" });
   });
 }
 
 // ---------- 15. QATT Card ----------
 {
   const s = canvasSlide({ section: S4, n: 11, stage: "How?", name: "QATT Card", q: "how do we turn “it must be good” into a number?",
-    what: "A quality written as a test scenario: who does what, and the measured response.",
-    helps: ["Turns a wish into a pass or fail", "Six fixed parts, so nothing is vague", "Gives every ASR a way to be checked"],
+    thumb: "qatt", what: "A quality written as a test: who does what, and what we measure.",
+    helps: ["Turns a wish into pass or fail", "Gives every rule a number"],
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
-    notes: "QATT = quality attribute scenario. The top chain is one scenario written out in the six standard parts. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
+    notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
   txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
-  const parts = [["SOURCE", "A delivery engineer"], ["STIMULUS", "files a ticket that touches five files"], ["ENVIRONMENT", "a normal run, local models, no cloud"], ["ARTIFACT", "the AIForge agent line"], ["RESPONSE", "one merged change that builds; the parts link"], ["MEASURE", "0 → 53 linked lines; first full run green"]];
+  const parts = [["WHO", "A delivery engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run, local models, no cloud"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
   const pw = AW / 6;
   parts.forEach(([t, b], i) => {
     const last = i === 5;
@@ -549,8 +631,8 @@ pres.addSection({ title: S4 });
   txt(s, "MORE SCENARIOS", { x: AX, y: AY + 2.02, w: AW, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   const more = [
     ["Nothing leaves our network", "A check fails the build if it would call out", "Running today, small batch", C.accent5],
-    ["We know the size limit", "Files per ticket handled cleanly", "3–5 files now", C.accent4],
-    ["Team memory does not bloat", "Duplicate notes; growth per week", "Fold step designed", C.accent6],
+    ["We know the size limit", "Count files one ticket handles cleanly", "3–5 files now", C.accent4],
+    ["Team memory does not bloat", "Count duplicate notes each week", "Merge step designed", C.accent6],
   ];
   const cw = (AW - 0.24) / 3, my = AY + 2.32, mh = AH - 2.32;
   more.forEach(([h, chk, st, col], i) => {
@@ -565,13 +647,13 @@ pres.addSection({ title: S4 });
 // ---------- 16. Decision Record (ADR) ----------
 {
   const s = canvasSlide({ section: S4, n: 12, stage: "How?", name: "Decision Record (ADR)", q: "what did we decide, what else did we consider, and why?",
-    what: "ADR = architecture decision record. One decision with its options, reasons and cost.",
-    helps: ["Keeps the reasons, so nobody re-argues them", "Forces real options, not one favourite", "Names the bias you checked and the owner"],
+    thumb: "adr", what: "A short record of one choice: what we picked, what we dropped, why.",
+    helps: ["Nobody re-argues it later", "Forces real options"],
     short: "we did not pick it because we liked it — it is the one our tests kept passing.",
     notes: "Myth we tested: 'just wait for a bigger model'. Same models, same machines — only splitting the work differently fixed it. The decisions log has four settled decisions and three still open, all about team memory." });
   cell(s, AX, AY, AW, 0.86, "CONTEXT", "Our local models hold about 3–5 files at once. A multi-file ticket must still build as one piece — and no code may leave.", { fs: 12.5 });
   const ow = (AW - 0.36) / 4, oy = AY + 0.94, oh = 1.38;
-  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "0 linked lines on a multi-file ticket.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Small-agent line", "0 → 53 linked lines. Builds before every merge.", true]];
+  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "0 linked lines on a multi-file ticket.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Many small agents", "0 → 53 linked lines. Builds before every merge.", true]];
   opts.forEach(([h, b, pick], i) => {
     const x = AX + i * (ow + 0.12);
     box(s, x, oy, ow, oh, { fill: pick ? C.accent1 : C.background1, lineColor: pick ? HEX.accent1 : HEX.accent3, name: "Option" });
@@ -580,13 +662,13 @@ pres.addSection({ title: S4 });
     txt(s, b, { x: x + 0.12, y: oy + 0.74, w: ow - 0.24, h: 0.6, fontSize: 12, color: pick ? C.background1 : C.text1 });
   });
   const dy = oy + oh + 0.08, dh = AH - (dy - AY), w1 = 3.05, w2 = 3.05, w3 = AW - w1 - w2 - 0.24;
-  cell(s, AX, dy, w1, dh, "DECISION — WE WILL…", "finish each ticket with a line of small specialist agents, each with one small job. Simple tickets skip the line.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 12.5, bold: true });
+  cell(s, AX, dy, w1, dh, "DECISION — WE WILL…", "finish each ticket with a line of small agents, each with one small job. Simple tickets skip the line.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 12.5, bold: true });
   cell(s, AX + w1 + 0.12, dy, w2, dh, "CONSEQUENCES", [
     { text: "+ ", options: { bold: true, color: C.accent5 } }, { text: "each role is checked on its own; a bad part fails alone", options: { breakLine: true } },
     { text: "– ", options: { bold: true, color: C.accent4 } }, { text: "more model calls, more waiting, more moving parts" }], { fs: 12.5 });
   const rx = AX + w1 + w2 + 0.24;
   box(s, rx, dy, w3, dh, { name: "Characteristics" });
-  txt(s, "REVERSIBILITY", { x: rx + 0.11, y: dy + 0.07, w: w3 - 0.22, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
+  txt(s, "CAN WE UNDO IT?", { x: rx + 0.11, y: dy + 0.07, w: w3 - 0.22, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   seg(s, rx + 0.2, dy + 0.52, rx + w3 - 0.2, dy + 0.52, HEX.accent3, 4);
   s.addShape(SH.OVAL, { x: rx + 0.42, y: dy + 0.41, w: 0.22, h: 0.22, fill: { color: C.accent5 }, objectName: "Reversibility marker" });
   txt(s, "easy to undo", { x: rx + 0.11, y: dy + 0.66, w: w3 / 2, h: 0.22, fontSize: 10, color: C.accent6 });
@@ -599,8 +681,8 @@ pres.addSection({ title: S5 });
 // ---------- 17. OKR Card ----------
 {
   const s = canvasSlide({ section: S5, n: 13, stage: "Where next?", name: "OKR Card", q: "what does good look like, in numbers we can check?",
-    what: "OKR = objective and key results: one goal and a few measures.",
-    helps: ["One goal everyone can repeat", "Measures you can actually check", "Shows honestly where you are today"],
+    thumb: "okr", what: "OKR = one goal, and a few numbers that show progress.",
+    helps: ["A goal everyone can repeat", "Shows honestly where we are"],
     short: "the tool works; now we must measure how often it succeeds. The first row is the problem.",
     notes: "Without the first number there is no case to make this standard practice. Bars show how far today is from target; the dashed bar means we do not measure it yet." });
   s.addShape(SH.ROUNDED_RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
@@ -631,8 +713,8 @@ pres.addSection({ title: S5 });
 // ---------- 18. Roadmap Canvas ----------
 {
   const s = canvasSlide({ section: S5, n: 14, stage: "Where next?", name: "Roadmap Canvas", q: "what happens when — for product, platform and people?",
-    what: "The plan over time, with product, platform and people in one view.",
-    helps: ["Change is people and process, not only code", "Each row moves together, quarter by quarter", "Every item traces back to an OKR or a gap"],
+    thumb: "roadmap", what: "The plan over time: product, platform and people together.",
+    helps: ["People and process, not only code", "Shows what comes first"],
     short: "one rule for the whole year: nothing on this roadmap moves work off our own hardware.",
     notes: "Read each row left to right. The people row is the one most likely to slip, and it is the one the power/interest grid said matters most." });
   const lw = 1.3, cw = (AW - lw) / 4, x0 = AX + lw;
@@ -689,24 +771,30 @@ pres.addSection({ title: S6 });
   s.addNotes("This is the traceability the toolkit talks about: the persona's pain becomes a requirement, the requirement forces a decision, the decision is proved by a measured scenario, and the goal tracks it over time.");
 }
 
-// ---------- 20. Take away ----------
+// ---------- Take away ----------
 {
   const s = pres.addSlide({ masterName: "DARK", sectionTitle: S6 });
-  txt(s, "What to take away", { x: 0.8, y: 0.6, w: 11.7, h: 0.9, fontSize: 40, bold: true, color: C.background1, fontFace: THEME.headFontFace });
-  txt(s, "How to use the canvases on your own work — and what AIForge taught us.", { x: 0.8, y: 1.45, w: 11.7, h: 0.5, fontSize: 20, color: C.accent3 });
-  const cols = [
-    ["Using the canvases", ["Start with the person, not the technology", "One page each — if it does not fit, it is not clear yet", "Fill boxes with facts; leave the gaps visible", "Pin them side by side and follow the links"]],
-    ["What AIForge taught us", ["The limit was the design, not the model", "The canvases made the argument checkable — one page, not a long thread", "A tool one person can run is not yet a tool the company owns"]],
-  ];
-  cols.forEach(([h, items], i) => {
-    const x = 0.8 + i * 6.0;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 2.3, w: 5.6, h: 3.05, fill: { color: "2A6274" }, rectRadius: 0.1, objectName: "Panel" });
-    num(s, x + 0.35, 2.52, i + 1, 0.5, i ? C.accent4 : C.accent1);
-    txt(s, h, { x: x + 1.0, y: 2.52, w: 4.3, h: 0.5, fontSize: 22, bold: true, color: C.accent2, valign: "middle" });
-    txt(s, items.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < items.length - 1 } })),
-      { x: x + 0.35, y: 3.2, w: 4.95, h: 2.35, fontSize: 16, color: C.background1, paraSpaceAfter: 10 });
+  txt(s, "What to take away", { x: 0.8, y: 0.55, w: 11.7, h: 0.9, fontSize: 40, bold: true, color: C.background1, fontFace: THEME.headFontFace });
+  txt(s, "Four steps to use the canvases on your own work", { x: 0.8, y: 1.4, w: 11.7, h: 0.45, fontSize: 20, color: C.accent3 });
+  const steps = [["Start with the person", "not with the technology"], ["One page each", "if it does not fit, it is not clear yet"], ["Fill in facts", "and leave the gaps where all can see"], ["Follow the links", "pin them side by side"]];
+  const w = 2.6, gap = (11.73 - 4 * w) / 3;
+  steps.forEach(([h, b], i) => {
+    const x = 0.8 + i * (w + gap);
+    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 2.1, w, h: 1.55, fill: { color: "2A6274" }, rectRadius: 0.1, objectName: "Step" });
+    num(s, x + 0.2, 2.25, i + 1, 0.5, i % 2 ? C.accent4 : C.accent1);
+    txt(s, h, { x: x + 0.82, y: 2.25, w: w - 0.95, h: 0.5, fontSize: 16, bold: true, color: C.accent2, valign: "middle" });
+    txt(s, b, { x: x + 0.2, y: 2.88, w: w - 0.4, h: 0.7, fontSize: 14, color: C.background1 });
+    if (i < 3) arrow(s, x + w + gap / 2 - 0.16, 2.7, 0.32, 0.35, C.accent2);
   });
-  txt(s, "Every claim here has a canvas behind it.", { x: 0.8, y: 5.7, w: 11.7, h: 0.4, fontSize: 15, italic: true, color: C.accent3 });
+  txt(s, "What AIForge taught us", { x: 0.8, y: 3.95, w: 11.7, h: 0.45, fontSize: 20, color: C.accent3 });
+  const notes = ["The limit was the design, not the model.", "One page per canvas made the thinking easy to check.", "A tool one person can run is not yet a tool the company owns."];
+  const nw = 3.6, ng = (11.73 - 3 * nw) / 2;
+  notes.forEach((t, i) => {
+    const x = 0.8 + i * (nw + ng), rot = i === 1 ? -1.2 : 1.2;
+    s.addShape(SH.RECTANGLE, { x, y: 4.6, w: nw, h: 1.3, fill: { color: C.accent2 }, rotate: rot, shadow: { type: "outer", color: "0F2A33", opacity: 0.4, blur: 5, offset: 3, angle: 90 }, objectName: "Sticky note" });
+    txt(s, t, { x: x + 0.2, y: 4.6, w: nw - 0.4, h: 1.3, fontSize: 15, bold: true, color: C.text1, align: "center", valign: "middle", rotate: rot });
+  });
+  txt(s, "Every claim here has a canvas behind it.", { x: 0.8, y: 6.3, w: 11.7, h: 0.4, fontSize: 15, italic: true, color: C.accent3 });
   s.addNotes("Close by asking the audience to pick one canvas and fill it for their own project this week. The persona card is the easiest place to start.");
 }
 
