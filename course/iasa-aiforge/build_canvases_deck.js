@@ -4,17 +4,18 @@ const pptxgen = require("pptxgenjs");
 const { applyTheme } = require(process.env.SKILL + "/apply_theme.js");
 
 const THEME = {
-  name: "AIForge Teal",
-  headFontFace: "Cambria",
+  name: "Plain",
+  headFontFace: "Calibri",
   bodyFontFace: "Calibri",
   colors: {
-    dk1: "1B2A30", lt1: "FFFFFF", dk2: "1F4E5F", lt2: "EEF4F6",
-    accent1: "2E7D8C", accent2: "FBE7A1", accent3: "C8DDE3", accent4: "D9822B",
-    accent5: "5B8C5A", accent6: "6B7D84", hlink: "2E7D8C", folHlink: "1F4E5F",
+    dk1: "222222", lt1: "FFFFFF", dk2: "404040", lt2: "F2F2F2",
+    accent1: "1F4E79", accent2: "FFF2CC", accent3: "D9D9D9", accent4: "C55A11",
+    accent5: "548235", accent6: "7F7F7F", hlink: "1F4E79", folHlink: "404040",
   },
 };
 const HEX = THEME.colors;
-const TINT = { orange: "F6E3D3", green: "DCEEE2", teal: "E3F1F3" };
+const TINT = { orange: "FBE5D6", green: "E2F0D9", teal: "DEEAF6" };
+const LINE = "A6A6A6";
 const TOTAL = 14;
 
 const pres = new pptxgen();
@@ -28,18 +29,18 @@ const SH = pres.shapes;
 // ---------- layouts ----------
 pres.defineSlideMaster({
   title: "DARK",
-  background: { color: C.text2 },
+  background: { color: C.background1 },
   objects: [
-    { placeholder: { options: { name: "title", type: "title", x: 0.8, y: 1.9, w: 11.7, h: 1.5, fontSize: 50, bold: true, color: C.background1, fontFace: THEME.headFontFace, valign: "bottom", align: "left", margin: 0 }, text: "" } },
-    { placeholder: { options: { name: "body", type: "body", x: 0.8, y: 3.55, w: 11.0, h: 1.4, fontSize: 24, color: C.accent3, valign: "top", align: "left", margin: 0 }, text: "" } },
+    { placeholder: { options: { name: "title", type: "title", x: 0.8, y: 2.2, w: 11.7, h: 1.2, fontSize: 40, bold: true, color: C.text1, valign: "bottom", align: "left", margin: 0 }, text: "" } },
+    { placeholder: { options: { name: "body", type: "body", x: 0.8, y: 3.55, w: 11.0, h: 1.0, fontSize: 22, color: C.accent6, valign: "top", align: "left", margin: 0 }, text: "" } },
   ],
 });
 pres.defineSlideMaster({
   title: "CONTENT",
-  background: { color: C.background2 },
+  background: { color: C.background1 },
   margin: [0.5, 0.6, 0.6, 0.6],
   objects: [
-    { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.4, w: 9.6, h: 0.8, fontSize: 36, bold: true, color: C.text2, fontFace: THEME.headFontFace, valign: "middle", align: "left", margin: 0 }, text: "" } },
+    { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.4, w: 9.6, h: 0.8, fontSize: 32, bold: true, color: C.text1, valign: "middle", align: "left", margin: 0 }, text: "" } },
     { placeholder: { options: { name: "body", type: "body", x: 0.6, y: 1.2, w: 9.6, h: 0.5, fontSize: 18, color: C.text1, valign: "top", align: "left", margin: 0 }, text: "" } },
     { text: { text: "IASA canvases  ·  explained with AIForge", options: { x: 0.6, y: 7.05, w: 6, h: 0.3, fontSize: 10, color: C.accent6, margin: 0 } } },
   ],
@@ -55,21 +56,16 @@ function content(section, title, sub) {
   if (sub) s.addText(sub, { placeholder: "body" });
   return s;
 }
-// sticky note, top right: the deck's motif
+// plain label, top right
 function sticky(s, small, big) {
-  s.addShape(SH.RECTANGLE, { x: 10.55, y: 0.4, w: 2.2, h: 0.85, fill: { color: C.accent2 }, rotate: 2,
-    shadow: { type: "outer", color: HEX.accent6, opacity: 0.35, blur: 4, offset: 2, angle: 90 }, objectName: "Sticky note" });
-  txt(s, [{ text: small, options: { fontSize: 11, color: C.accent6, breakLine: true } }, { text: big, options: { fontSize: 14, bold: true, color: C.text1 } }],
-    { x: 10.6, y: 0.42, w: 2.1, h: 0.8, align: "center", valign: "middle", rotate: 2 });
+  txt(s, `${small}  ·  ${big}`, { x: 9.3, y: 0.55, w: 3.43, h: 0.3, fontSize: 12, color: C.accent6, align: "right" });
 }
 function inShort(s, text) {
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: 0.6, y: 6.15, w: 12.13, h: 0.7, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "In short band" });
-  txt(s, [{ text: "In short:  ", options: { bold: true, color: C.accent2 } }, { text, options: { color: C.background1 } }],
-    { x: 0.85, y: 6.15, w: 11.7, h: 0.7, fontSize: 18, valign: "middle" });
+  txt(s, [{ text: "In short:  ", options: { bold: true, color: C.accent1 } }, { text }], { x: 0.6, y: 6.2, w: 12.13, h: 0.6, fontSize: 17, valign: "middle" });
 }
 function box(s, x, y, w, h, o = {}) {
-  s.addShape(SH.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: o.fill || C.background1 }, rectRadius: o.r === undefined ? 0.07 : o.r,
-    line: { color: o.lineColor || HEX.accent3, width: o.lw || 1, dashType: o.dash || "solid" }, objectName: o.name || "Box" });
+  s.addShape(SH.RECTANGLE, { x, y, w, h, fill: { color: o.fill || C.background1 }, rectRadius: o.r === undefined ? 0.07 : o.r,
+    line: { color: o.lineColor || LINE, width: o.lw || 0.75, dashType: o.dash || "solid" }, objectName: o.name || "Box" });
 }
 // a canvas cell: small caption on top, content below
 function cell(s, x, y, w, h, title, body, o = {}) {
@@ -80,19 +76,18 @@ function cell(s, x, y, w, h, title, body, o = {}) {
   if (body) txt(s, body, { x: x + pad, y: title ? ty : y, w: w - 2 * pad, h: title ? y + h - ty - 0.05 : h, fontSize: o.fs || 12,
     color: o.col || C.text1, valign: title ? "top" : "middle", align: o.align || "left", bold: !!o.bold });
 }
-function num(s, x, y, n, d = 0.5, fill) {
-  s.addShape(SH.OVAL, { x, y, w: d, h: d, fill: { color: fill || C.accent1 }, objectName: "Number circle" });
-  txt(s, String(n), { x, y, w: d, h: d, align: "center", valign: "middle", fontSize: d > 0.45 ? 18 : 12, bold: true, color: C.background1 });
+function num(s, x, y, n, d = 0.5, fill) { // plain bold number, no circle
+  txt(s, String(n), { x, y, w: d, h: d, align: "center", valign: "middle", fontSize: d > 0.45 ? 22 : 14, bold: true, color: fill || C.accent1 });
 }
 function arrow(s, x, y, w = 0.35, h = 0.35, fill) { s.addShape(SH.RIGHT_ARROW, { x, y, w, h, fill: { color: fill || C.accent1 }, objectName: "Arrow" }); }
 function pill(s, x, y, w, h, text, fill, col) {
-  s.addShape(SH.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: fill }, rectRadius: h / 2, objectName: "Pill" });
+  s.addShape(SH.RECTANGLE, { x, y, w, h, fill: { color: fill }, rectRadius: h / 2, objectName: "Pill" });
   txt(s, text, { x, y, w, h, fontSize: 11, bold: true, align: "center", valign: "middle", color: col || C.text1 });
 }
 function person(s, x, y, d) { // simple avatar: circle, head, shoulders
   s.addShape(SH.OVAL, { x, y, w: d, h: d, fill: { color: C.accent3 }, objectName: "Avatar" });
   s.addShape(SH.OVAL, { x: x + d * 0.34, y: y + d * 0.18, w: d * 0.32, h: d * 0.32, fill: { color: C.text2 }, objectName: "Avatar head" });
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: x + d * 0.22, y: y + d * 0.56, w: d * 0.56, h: d * 0.28, fill: { color: C.text2 }, rectRadius: d * 0.12, objectName: "Avatar shoulders" });
+  s.addShape(SH.RECTANGLE, { x: x + d * 0.22, y: y + d * 0.56, w: d * 0.56, h: d * 0.28, fill: { color: C.text2 }, rectRadius: d * 0.12, objectName: "Avatar shoulders" });
 }
 function seg(s, x1, y1, x2, y2, color, width, o = {}) { // straight line between two points
   s.addShape(SH.LINE, { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1), flipV: (y2 < y1) !== (x2 < x1),
@@ -123,10 +118,10 @@ const THUMBS = {
   roadmap: [...G(4, 1, 0.16, 0, 0.84, 0.2, "y"), ...[0, 1, 2].flatMap((r) => [["r", 0, 0.27 + r * 0.25, 0.13, 0.2, "o"], ...G(4, 1, 0.16, 0.27 + r * 0.25, 0.84, 0.2, r === 1 ? "l" : "w")])],
 };
 function thumb(s, kind, x, y, w, h) {
-  const col = { l: C.accent3, y: C.accent2, o: C.accent4, w: C.background1, t: C.accent1 };
+  const col = { l: C.accent3, y: C.accent2, o: C.accent4, w: C.background2, t: C.accent1 };
   THUMBS[kind].forEach(([sh, fx, fy, fw, fh, c]) => {
     if (sh === "o") s.addShape(SH.OVAL, { x: x + fx * w, y: y + fy * h, w: fw * w, h: fh * h, fill: { color: col[c] }, objectName: "Sketch" });
-    else s.addShape(SH.ROUNDED_RECTANGLE, { x: x + fx * w, y: y + fy * h, w: fw * w, h: fh * h, fill: { color: col[c] }, rectRadius: 0.02, objectName: "Sketch" });
+    else s.addShape(SH.RECTANGLE, { x: x + fx * w, y: y + fy * h, w: fw * w, h: fh * h, fill: { color: col[c] }, line: { color: LINE, width: 0.5 }, objectName: "Sketch" });
   });
 }
 
@@ -135,15 +130,14 @@ const AX = 4.25, AY = 1.9, AW = 8.48, AH = 4.05;
 function canvasSlide(o) {
   const s = content(o.section, o.name, [{ text: "It answers:  ", options: { bold: true, color: C.accent1 } }, { text: o.q }]);
   sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: 0.6, y: AY, w: 3.4, h: AH, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "About the canvas" });
-  const lab = (t, y) => txt(s, t, { x: 0.85, y: AY + y, w: 2.9, h: 0.26, fontSize: 11, bold: true, color: C.accent2, charSpacing: 1.5 });
-  lab("WHAT IT IS", 0.18);
-  txt(s, o.what, { x: 0.85, y: AY + 0.45, w: 2.9, h: 0.8, fontSize: 15, color: C.background1 });
-  lab("THE BLANK CANVAS", 1.38);
-  thumb(s, o.thumb, 0.85, AY + 1.67, 2.9, 0.76);
-  lab("WHY USE IT", 2.6);
+  const lab = (t, y) => txt(s, t, { x: 0.6, y: AY + y, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: C.accent6, charSpacing: 1 });
+  lab("WHAT IT IS", 0);
+  txt(s, o.what, { x: 0.6, y: AY + 0.28, w: 3.3, h: 0.85, fontSize: 15 });
+  lab("THE BLANK CANVAS", 1.3);
+  thumb(s, o.thumb, 0.6, AY + 1.6, 3.0, 0.8);
+  lab("WHY USE IT", 2.65);
   txt(s, o.helps.map((t, i) => ({ text: t, options: { bullet: { indent: 14 }, breakLine: i < o.helps.length - 1 } })),
-    { x: 0.85, y: AY + 2.86, w: 2.9, h: 1.1, fontSize: 14, color: C.background1, paraSpaceAfter: 5 });
+    { x: 0.6, y: AY + 2.93, w: 3.3, h: 1.1, fontSize: 14, paraSpaceAfter: 5 });
   inShort(s, o.short);
   s.addNotes(o.notes);
   return s;
@@ -158,19 +152,15 @@ pres.addSection({ title: S1 });
 // ---------- 1. Title ----------
 {
   const s = pres.addSlide({ masterName: "DARK", sectionTitle: S1 });
-  txt(s, "IASA Masterclass  ·  Canvas guide", { x: 0.8, y: 0.7, w: 8, h: 0.4, fontSize: 16, color: C.accent2, bold: true });
+  txt(s, "IASA Masterclass  ·  Canvas guide", { x: 0.8, y: 0.7, w: 8, h: 0.4, fontSize: 16, color: C.accent6 });
   s.addText("IASA canvases, explained with AIForge", { placeholder: "title" });
-  s.addText([
-    { text: "What each canvas is for — and the same canvas filled in for our own AI developer.", options: {} },
-  ], { placeholder: "body" });
+  s.addText("What each canvas is for, and the same canvas filled in for our own AI developer.", { placeholder: "body" });
   [["First", "how canvases help"], ["Then", `${TOTAL} canvases, one by one`], ["Each time", "the AIForge example"]].forEach(([a, b], i) => {
     const x = 0.8 + i * 3.0;
-    s.addShape(SH.RECTANGLE, { x, y: 5.15, w: 2.6, h: 1.05, fill: { color: C.accent2 }, rotate: i === 1 ? -1.5 : 1.5,
-      shadow: { type: "outer", color: "0F2A33", opacity: 0.4, blur: 5, offset: 3, angle: 90 }, objectName: "Sticky note" });
-    txt(s, [{ text: a, options: { fontSize: 12, color: C.accent6, breakLine: true } }, { text: b, options: { fontSize: 16, bold: true, color: C.text1 } }],
-      { x: x + 0.1, y: 5.15, w: 2.4, h: 1.05, align: "center", valign: "middle", rotate: i === 1 ? -1.5 : 1.5 });
+    box(s, x, 5.0, 2.7, 0.95, { name: "Agenda box" });
+    txt(s, [{ text: a, options: { fontSize: 12, color: C.accent6, breakLine: true } }, { text: b, options: { fontSize: 16, bold: true } }], { x: x + 0.15, y: 5.0, w: 2.4, h: 0.95, valign: "middle" });
   });
-  txt(s, "Roles only — no names, no customer detail.", { x: 0.8, y: 6.75, w: 8, h: 0.35, fontSize: 12, italic: true, color: C.accent3 });
+  txt(s, "Roles only. No names, no customer detail.", { x: 0.8, y: 6.6, w: 8, h: 0.35, fontSize: 12, color: C.accent6 });
   s.addNotes("This deck teaches the IASA canvases using one running example: AIForge, the tool that turns a ticket into a tested pull request on machines we own. First we look at why canvases help at all, then at each canvas in turn.");
 }
 
@@ -178,7 +168,7 @@ pres.addSection({ title: S1 });
 {
   const s = content(S1, "How canvases help", "Six reasons to fill a one-page canvas instead of writing a long document");
   sticky(s, "Start here", "Why bother?");
-  const R = (x, y, w, h, fill, o = {}) => s.addShape(SH.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: fill }, rectRadius: 0.03, line: { color: o.line || HEX.accent6, width: o.lw === undefined ? 0.75 : o.lw, dashType: o.dash || "solid" }, objectName: "Picture" });
+  const R = (x, y, w, h, fill, o = {}) => s.addShape(SH.RECTANGLE, { x, y, w, h, fill: { color: fill }, rectRadius: 0.03, line: { color: o.line || HEX.accent6, width: o.lw === undefined ? 0.75 : o.lw, dashType: o.dash || "solid" }, objectName: "Picture" });
   const pics = [
     (x, y) => { [0, 1, 2].forEach((i) => R(x + i * 0.07, y + 0.14 - i * 0.07, 0.42, 0.56, C.background2)); arrow(s, x + 0.66, y + 0.27, 0.22, 0.22, C.accent4); R(x + 0.96, y + 0.07, 0.42, 0.56, C.accent2, { line: HEX.accent4, lw: 1.25 }); },
     (x, y) => { [0, 1, 2, 3].forEach((i) => R(x, y + 0.08 + i * 0.16, i === 3 ? 0.3 : 0.5, 0.07, C.accent6, { lw: 0 })); arrow(s, x + 0.6, y + 0.27, 0.22, 0.22, C.accent4); R(x + 0.9, y + 0.05, 0.48, 0.62, C.background1, { line: HEX.accent1, lw: 1.25 }); R(x + 0.96, y + 0.11, 0.16, 0.5, C.accent3, { lw: 0 }); R(x + 1.16, y + 0.11, 0.16, 0.22, C.accent2, { lw: 0 }); R(x + 1.16, y + 0.39, 0.16, 0.22, C.accent3, { lw: 0 }); },
@@ -249,7 +239,7 @@ const STAGES = [
   ];
   boxes.forEach(([h, b, fill, col], i) => {
     const x = 0.6 + i * 4.2;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 1.95, w: 3.6, h: 2.1, fill: { color: fill }, rectRadius: 0.1, line: { color: HEX.accent3, width: 1 }, objectName: "Flow box" });
+    s.addShape(SH.RECTANGLE, { x, y: 1.95, w: 3.6, h: 2.1, fill: { color: fill }, rectRadius: 0.1, line: { color: HEX.accent3, width: 1 }, objectName: "Flow box" });
     txt(s, h, { x: x + 0.3, y: 2.15, w: 3.0, h: 0.6, fontSize: 26, bold: true, color: col });
     txt(s, b, { x: x + 0.3, y: 2.8, w: 3.0, h: 1.2, fontSize: 16, color: col });
     if (i < 2) arrow(s, x + 3.68, 2.78, 0.45, 0.45);
@@ -257,7 +247,7 @@ const STAGES = [
   const facts = [["Our machines only", "No cloud. No code or data leaves the building."], ["Seven small agents", "Each has one small job and only the context it needs."], ["A person acts twice", "Write the ticket. Read the pull request."]];
   facts.forEach(([h, b], i) => {
     const x = 0.6 + i * 4.2;
-    box(s, x, 4.35, 3.6, 1.55, { fill: C.accent2, lineColor: HEX.accent2, name: "Fact card" });
+    box(s, x, 4.35, 3.6, 1.55, { fill: C.accent2, lineColor: LINE, name: "Fact card" });
     txt(s, h, { x: x + 0.3, y: 4.5, w: 3.0, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
     txt(s, b, { x: x + 0.3, y: 4.97, w: 3.0, h: 0.85, fontSize: 14 });
   });
@@ -280,18 +270,18 @@ const STAGES = [
     if (i < 6) arrow(s, x + w + gap / 2 - 0.09, 2.72, 0.18, 0.22, C.accent4);
   });
   // why split: one big job does not fit, small jobs do
-  box(s, 0.6, 3.9, 12.13, 2.05, { fill: C.accent2, lineColor: HEX.accent2, name: "Why split" });
+  box(s, 0.6, 3.9, 12.13, 2.05, { fill: C.accent2, lineColor: LINE, name: "Why split" });
   txt(s, "Why split the work?", { x: 0.85, y: 4.02, w: 3.4, h: 0.4, fontSize: 18, bold: true, color: C.text2 });
   txt(s, "A local AI model can hold only 3–5 files in mind at once (the dashed box). One big job does not fit. Small jobs do.", { x: 0.85, y: 4.45, w: 3.4, h: 1.4, fontSize: 14 });
   const frame = (x, label) => {
-    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 4.4, w: 1.5, h: 0.8, fill: { color: C.background1, transparency: 100 }, rectRadius: 0.05, line: { color: HEX.dk2, width: 2, dashType: "dash" }, objectName: "What the model can hold" });
+    s.addShape(SH.RECTANGLE, { x, y: 4.4, w: 1.5, h: 0.8, fill: { color: C.background1, transparency: 100 }, rectRadius: 0.05, line: { color: HEX.dk2, width: 2, dashType: "dash" }, objectName: "What the model can hold" });
     txt(s, label, { x: x - 0.6, y: 5.5, w: 2.7, h: 0.3, fontSize: 12.5, bold: true, color: C.text2, align: "center" });
   };
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: 4.95, y: 4.1, w: 2.5, h: 1.3, fill: { color: C.accent4 }, rectRadius: 0.06, objectName: "Big job" });
+  s.addShape(SH.RECTANGLE, { x: 4.95, y: 4.1, w: 2.5, h: 1.3, fill: { color: C.accent4 }, rectRadius: 0.06, objectName: "Big job" });
   txt(s, "12 files", { x: 4.95, y: 4.1, w: 2.5, h: 1.3, fontSize: 16, bold: true, color: C.background1, align: "center", valign: "middle" });
   frame(5.45, "One big job: does not fit");
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: 9.3, y: 4.25, w: 2.1, h: 1.1, fill: { color: C.background1 }, rectRadius: 0.06, objectName: "Room to spare" });
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fill: { color: C.accent5 }, rectRadius: 0.05, objectName: "Small job" });
+  s.addShape(SH.RECTANGLE, { x: 9.3, y: 4.25, w: 2.1, h: 1.1, fill: { color: C.background1 }, rectRadius: 0.06, objectName: "Room to spare" });
+  s.addShape(SH.RECTANGLE, { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fill: { color: C.accent5 }, rectRadius: 0.05, objectName: "Small job" });
   txt(s, "3 files", { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle" });
   frame(9.6, "One small job: fits");
   arrow(s, 8.05, 4.75, 0.6, 0.45, C.text2);
@@ -380,7 +370,7 @@ pres.addSection({ title: S2 });
   const rows = [["Today", today, TINT.orange, C.accent4], ["With AIForge", after, TINT.green, C.accent5]];
   rows.forEach(([label, vals, fill, col], r) => {
     const y = fy + fh + 0.1 + r * 1.1;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x: AX, y, w: lw - 0.1, h: 1.0, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
+    s.addShape(SH.RECTANGLE, { x: AX, y, w: lw - 0.1, h: 1.0, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
     txt(s, label, { x: AX + 0.05, y, w: lw - 0.2, h: 1.0, fontSize: 14, bold: true, color: C.background1, align: "center", valign: "middle" });
     vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, 1.0, null, v, { fill, lineColor: fill, align: "center", fs: 12 }));
   });
@@ -411,7 +401,7 @@ pres.addSection({ title: S2 });
   seg(s, gx + 4.85, gy + 2.83, gx + 4.85, gy + 1.92, HEX.accent4, 2, { dashType: "dash", endArrowType: "triangle" });
   chip("Junior developers", 0.55, 2.55, 1.75, C.accent1, C.background1);
   const lx = gx + gw + 0.25, lwid = AX + AW - lx;
-  box(s, lx, AY, lwid, AH, { fill: C.accent2, lineColor: HEX.accent2, name: "Moves card" });
+  box(s, lx, AY, lwid, AH, { fill: C.accent2, lineColor: LINE, name: "Moves card" });
   txt(s, "The moves we need", { x: lx + 0.15, y: AY + 0.15, w: lwid - 0.3, h: 0.35, fontSize: 15, bold: true, color: C.text2 });
   const moves = [["IT operations", "watching → owning the model service"], ["QA and testers", "affected → owning the test gate"], ["Platform operator", "one person → two"]];
   moves.forEach(([a, b], i) => {
@@ -472,7 +462,7 @@ pres.addSection({ title: S3 });
   arrow(s, AX + iw + 0.12, AY + 1.0, 0.4, 0.4);
   arrow(s, cx + cwid + 0.12, AY + 1.0, 0.4, 0.4, C.accent5);
   box(s, cx - 0.08, AY, cwid + 0.16, th, { fill: C.background2, lineColor: HEX.accent4, lw: 1.75, dash: "dash", r: 0.12, name: "System boundary" });
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: cx + 0.08, y: AY + 0.38, w: cwid - 0.16, h: th - 0.54, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "AIForge" });
+  s.addShape(SH.RECTANGLE, { x: cx + 0.08, y: AY + 0.38, w: cwid - 0.16, h: th - 0.54, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "AIForge" });
   txt(s, "our own hardware", { x: cx, y: AY + 0.07, w: cwid, h: 0.26, fontSize: 11, italic: true, color: C.accent4, align: "center" });
   txt(s, [{ text: "AIForge", options: { fontSize: 20, bold: true, color: C.accent2, breakLine: true } }, { text: "Plans the work", options: { breakLine: true } }, { text: "Writes and tests code", options: { breakLine: true } }, { text: "Reviews and merges" }],
     { x: cx + 0.2, y: AY + 0.42, w: cwid - 0.4, h: th - 0.62, fontSize: 13, color: C.background1, align: "center", valign: "middle" });
@@ -491,7 +481,7 @@ pres.addSection({ title: S3 });
     notes: "Everything below the dashed line runs without anyone watching. In a live demo, the progress panel shows the 'back stage' row as it happens." });
   const lw = 1.55, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.6, pitch = 0.65;
   ["Ask", "Work", "Check", "Hand back"].forEach((c, i) => {
-    s.addShape(SH.ROUNDED_RECTANGLE, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Stage" });
+    s.addShape(SH.RECTANGLE, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Stage" });
     txt(s, `${i + 1}. ${c}`, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle" });
   });
   const rows = [
@@ -531,7 +521,7 @@ pres.addSection({ title: S3 });
   const fill = { d: C.accent3, p: C.accent2, h: C.background1 };
   cols.forEach(([head, items], i) => {
     const x = AX + i * cw;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: AY, w: cw - 0.07, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Capability group" });
+    s.addShape(SH.RECTANGLE, { x, y: AY, w: cw - 0.07, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Capability group" });
     txt(s, head, { x: x + 0.06, y: AY, w: cw - 0.19, h: 0.68, fontSize: 12.5, bold: true, color: C.background1, align: "center", valign: "middle" });
     items.forEach(([t, k], j) => cell(s, x, AY + 0.78 + j * 0.85, cw - 0.07, 0.76, null, t, { fill: fill[k], align: "center", fs: 12, lineColor: k === "h" ? HEX.accent6 : HEX.accent3, dash: k === "h" ? "dash" : "solid" }));
   });
@@ -556,7 +546,7 @@ pres.addSection({ title: S3 });
   txt(s, "HOW MATURE", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
   ["Growing", "Good", "Strong"].forEach((t, i) => {
     const on = i === 1;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
+    s.addShape(SH.RECTANGLE, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
     txt(s, t, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fontSize: 12, bold: on, color: on ? C.background1 : C.accent6, align: "center", valign: "middle" });
   });
   const cw = (AW - 0.24) / 3, cy = AY + 0.9, ch = 2.15;
@@ -685,7 +675,7 @@ pres.addSection({ title: S5 });
     helps: ["A goal everyone can repeat", "Shows honestly where we are"],
     short: "the tool works; now we must measure how often it succeeds. The first row is the problem.",
     notes: "Without the first number there is no case to make this standard practice. Bars show how far today is from target; the dashed bar means we do not measure it yet." });
-  s.addShape(SH.ROUNDED_RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
   txt(s, [{ text: "OBJECTIVE   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.4, h: 0.68, fontSize: 16, valign: "middle" });
   const kx = AX, kw = 3.45, bx = AX + 3.6, bw = 2.5, tx = bx + bw + 0.15, tw = 1.15, gx2 = tx + tw + 0.05, gw = AX + AW - gx2;
   const hy = AY + 0.76;
@@ -703,8 +693,8 @@ pres.addSection({ title: S5 });
     box(s, kx, y, AW, h, { name: "Key result row" });
     txt(s, t, { x: kx + 0.14, y, w: kw - 0.2, h, fontSize: 12.5, valign: "middle" });
     const by = y + h / 2 - 0.11;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x: bx, y: by, w: bw, h: 0.22, fill: { color: C.background2 }, rectRadius: 0.11, line: { color: HEX.accent6, width: 1, dashType: pct === null ? "dash" : "solid" }, objectName: "Progress track" });
-    if (pct) s.addShape(SH.ROUNDED_RECTANGLE, { x: bx, y: by, w: Math.max(bw * pct, 0.22), h: 0.22, fill: { color: col }, rectRadius: 0.11, objectName: "Progress" });
+    s.addShape(SH.RECTANGLE, { x: bx, y: by, w: bw, h: 0.22, fill: { color: C.background2 }, rectRadius: 0.11, line: { color: HEX.accent6, width: 1, dashType: pct === null ? "dash" : "solid" }, objectName: "Progress track" });
+    if (pct) s.addShape(SH.RECTANGLE, { x: bx, y: by, w: Math.max(bw * pct, 0.22), h: 0.22, fill: { color: col }, rectRadius: 0.11, objectName: "Progress" });
     txt(s, now, { x: tx, y, w: tw, h, fontSize: 12.5, bold: true, color: col, align: "center", valign: "middle" });
     txt(s, tgt, { x: gx2, y, w: gw - 0.1, h, fontSize: 12.5, bold: true, color: C.text2, align: "center", valign: "middle" });
   });
@@ -730,7 +720,7 @@ pres.addSection({ title: S5 });
   const ry = AY + 0.6, pitch = (AH - 0.6) / 3;
   rows.forEach(([label, vals, col, fill], r) => {
     const y = ry + r * pitch, h = pitch - 0.1;
-    s.addShape(SH.ROUNDED_RECTANGLE, { x: AX, y, w: lw - 0.1, h, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
+    s.addShape(SH.RECTANGLE, { x: AX, y, w: lw - 0.1, h, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
     txt(s, label, { x: AX, y, w: lw - 0.1, h, fontSize: 15, bold: true, color: C.background1, align: "center", valign: "middle" });
     vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, h, null, v, { fill, lineColor: fill, align: "center", fs: 13 }));
   });
@@ -757,9 +747,8 @@ pres.addSection({ title: S6 });
   chain.forEach(([c, t], i) => {
     const x = 0.6 + i * (w + gap), rot = i % 2 ? -1.5 : 1.5;
     pill(s, x, 2.0, w, 0.36, c, i % 2 ? C.accent1 : C.text2, C.background1);
-    s.addShape(SH.RECTANGLE, { x, y: 2.6, w, h: 1.85, fill: { color: C.accent2 }, rotate: rot,
-      shadow: { type: "outer", color: HEX.accent6, opacity: 0.35, blur: 4, offset: 2, angle: 90 }, objectName: "Sticky note" });
-    txt(s, t, { x: x + 0.12, y: 2.6, w: w - 0.24, h: 1.85, fontSize: 14, bold: true, color: C.text1, align: "center", valign: "middle", rotate: rot });
+    s.addShape(SH.RECTANGLE, { x, y: 2.6, w, h: 1.85, fill: { color: C.accent2 }, objectName: "Sticky note" });
+    txt(s, t, { x: x + 0.12, y: 2.6, w: w - 0.24, h: 1.85, fontSize: 14, bold: true, color: C.text1, align: "center", valign: "middle" });
     if (i < 5) arrow(s, x + w + gap / 2 - 0.15, 3.38, 0.3, 0.3, C.accent4);
   });
   const labels = ["person", "pain", "requirement", "decision", "proof", "goal"];
@@ -773,28 +762,26 @@ pres.addSection({ title: S6 });
 
 // ---------- Take away ----------
 {
-  const s = pres.addSlide({ masterName: "DARK", sectionTitle: S6 });
-  txt(s, "What to take away", { x: 0.8, y: 0.55, w: 11.7, h: 0.9, fontSize: 40, bold: true, color: C.background1, fontFace: THEME.headFontFace });
-  txt(s, "Four steps to use the canvases on your own work", { x: 0.8, y: 1.4, w: 11.7, h: 0.45, fontSize: 20, color: C.accent3 });
+  const s = content(S6, "What to take away", "Four steps to use the canvases on your own work");
   const steps = [["Start with the person", "not with the technology"], ["One page each", "if it does not fit, it is not clear yet"], ["Fill in facts", "and leave the gaps where all can see"], ["Follow the links", "pin them side by side"]];
-  const w = 2.6, gap = (11.73 - 4 * w) / 3;
+  const w = 2.7, gap = (12.13 - 4 * w) / 3;
   steps.forEach(([h, b], i) => {
-    const x = 0.8 + i * (w + gap);
-    s.addShape(SH.ROUNDED_RECTANGLE, { x, y: 2.1, w, h: 1.55, fill: { color: "2A6274" }, rectRadius: 0.1, objectName: "Step" });
-    num(s, x + 0.2, 2.25, i + 1, 0.5, i % 2 ? C.accent4 : C.accent1);
-    txt(s, h, { x: x + 0.82, y: 2.25, w: w - 0.95, h: 0.5, fontSize: 16, bold: true, color: C.accent2, valign: "middle" });
-    txt(s, b, { x: x + 0.2, y: 2.88, w: w - 0.4, h: 0.7, fontSize: 14, color: C.background1 });
-    if (i < 3) arrow(s, x + w + gap / 2 - 0.16, 2.7, 0.32, 0.35, C.accent2);
+    const x = 0.6 + i * (w + gap);
+    box(s, x, 1.95, w, 1.5, { name: "Step" });
+    num(s, x + 0.1, 2.05, i + 1, 0.5);
+    txt(s, h, { x: x + 0.65, y: 2.05, w: w - 0.8, h: 0.5, fontSize: 16, bold: true, valign: "middle" });
+    txt(s, b, { x: x + 0.2, y: 2.65, w: w - 0.4, h: 0.7, fontSize: 14 });
+    if (i < 3) arrow(s, x + w + gap / 2 - 0.15, 2.55, 0.3, 0.3, C.accent6);
   });
-  txt(s, "What AIForge taught us", { x: 0.8, y: 3.95, w: 11.7, h: 0.45, fontSize: 20, color: C.accent3 });
+  txt(s, "What AIForge taught us", { x: 0.6, y: 3.85, w: 12, h: 0.4, fontSize: 18, bold: true });
   const notes = ["The limit was the design, not the model.", "One page per canvas made the thinking easy to check.", "A tool one person can run is not yet a tool the company owns."];
-  const nw = 3.6, ng = (11.73 - 3 * nw) / 2;
+  const nw = 3.85, ng = (12.13 - 3 * nw) / 2;
   notes.forEach((t, i) => {
-    const x = 0.8 + i * (nw + ng), rot = i === 1 ? -1.2 : 1.2;
-    s.addShape(SH.RECTANGLE, { x, y: 4.6, w: nw, h: 1.3, fill: { color: C.accent2 }, rotate: rot, shadow: { type: "outer", color: "0F2A33", opacity: 0.4, blur: 5, offset: 3, angle: 90 }, objectName: "Sticky note" });
-    txt(s, t, { x: x + 0.2, y: 4.6, w: nw - 0.4, h: 1.3, fontSize: 15, bold: true, color: C.text1, align: "center", valign: "middle", rotate: rot });
+    const x = 0.6 + i * (nw + ng);
+    box(s, x, 4.4, nw, 1.2, { fill: C.accent2, lineColor: LINE, name: "Lesson" });
+    txt(s, t, { x: x + 0.2, y: 4.4, w: nw - 0.4, h: 1.2, fontSize: 15, valign: "middle" });
   });
-  txt(s, "Every claim here has a canvas behind it.", { x: 0.8, y: 6.3, w: 11.7, h: 0.4, fontSize: 15, italic: true, color: C.accent3 });
+  inShort(s, "every claim here has a canvas behind it.");
   s.addNotes("Close by asking the audience to pick one canvas and fill it for their own project this week. The persona card is the easiest place to start.");
 }
 
