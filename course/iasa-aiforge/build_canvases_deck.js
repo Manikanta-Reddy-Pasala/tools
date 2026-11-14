@@ -135,9 +135,8 @@ function canvasSlide(o) {
   txt(s, o.what, { x: 0.6, y: AY + 0.28, w: 3.3, h: 0.85, fontSize: 15 });
   lab("THE BLANK CANVAS", 1.3);
   thumb(s, o.thumb, 0.6, AY + 1.6, 3.0, 0.8);
-  lab("WHY USE IT", 2.65);
-  txt(s, o.helps.map((t, i) => ({ text: t, options: { bullet: { indent: 14 }, breakLine: i < o.helps.length - 1 } })),
-    { x: 0.6, y: AY + 2.93, w: 3.3, h: 1.1, fontSize: 14, paraSpaceAfter: 5 });
+  lab("IN AIFORGE", 2.65);
+  txt(s, o.ex, { x: 0.6, y: AY + 2.93, w: 3.3, h: 1.1, fontSize: 14 });
   inShort(s, o.short);
   s.addNotes(o.notes);
   return s;
@@ -234,8 +233,8 @@ const STAGES = [
   sticky(s, "Running example", "AIForge");
   const boxes = [
     ["A ticket", "Written in plain words, the way you would ask a colleague", C.background1, C.text2],
-    ["AIForge", "A small team of AI agents on our own GPUs plans, writes, tests and reviews the change", C.accent1, C.background1],
-    ["A pull request", "A tested, reviewed code change, ready for a person to read and merge", C.background1, C.text2],
+    ["AIForge", "A small team of AI agents on our own machines plans, writes, tests and checks the change", C.accent1, C.background1],
+    ["A pull request", "A tested code change, ready for a person to read and accept", C.background1, C.text2],
   ];
   boxes.forEach(([h, b, fill, col], i) => {
     const x = 0.6 + i * 4.2;
@@ -285,7 +284,7 @@ const STAGES = [
   txt(s, "3 files", { x: 9.8, y: 4.55, w: 0.8, h: 0.5, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle" });
   frame(9.6, "One small job: fits");
   arrow(s, 8.05, 4.75, 0.6, 0.45, C.text2);
-  inShort(s, "one shared plan first, tests before code, and nothing is merged unless it builds.");
+  inShort(s, "one shared plan first, tests before code, and nothing is accepted unless it builds.");
   s.addNotes("Simple tickets skip most of this line; only real multi-file work runs all seven steps. The yellow panel is the key idea: same models, same machines — only the way the work was cut up changed.");
 }
 
@@ -297,21 +296,21 @@ pres.addSection({ title: S2 });
 // ---------- 5. Business Model Canvas ----------
 {
   const s = canvasSlide({ section: S2, n: 1, stage: "Why?", name: "Business Model Canvas", q: "how does this create value, and for whom?",
-    thumb: "bmc", what: "Nine boxes that show how something earns its keep.",
-    helps: ["Whole case on one page", "Shows who gains, what it costs"],
+    thumb: "bmc", what: "Nine boxes that show how something gives value, to whom, and at what cost.",
+    ex: "Ticket in, tested pull request out. It costs machines and one person; it gives senior hours back.",
     short: "AIForge sells nothing. It gives senior hours back, inside our own walls.",
     notes: "This is the internal-product view of the business model: the 'customers' are our own engineers and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
   const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
   const B = (i, y, h, t, b, o) => cell(s, AX + i * cw, y, cw - g, h, t, b, o);
-  B(0, AY, top, "KEY PARTNERS", lines(["IT operations", "QA and testers"]));
-  B(1, AY, hh, "KEY ACTIVITIES", "Plan, write, test, review");
-  B(1, AY + hh + g, hh, "KEY RESOURCES", lines(["Our own GPUs", "Local models", "Run memory"]));
-  B(2, AY, top, "VALUE OFFERED", lines(["Ticket in, tested pull request out.", "", "Code never leaves the building."]), { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, fs: 13, bold: true, tcol: C.text2 });
-  B(3, AY, hh, "RELATIONSHIP", "An honest verdict on every pull request");
-  B(3, AY + hh + g, hh, "CHANNELS", lines(["Chat", "Ticket tracker"]));
+  B(0, AY, top, "WHO HELPS", lines(["IT operations", "QA and testers"]));
+  B(1, AY, hh, "WHAT IT DOES", "Plan, write, test, check");
+  B(1, AY + hh + g, hh, "WHAT IT NEEDS", lines(["Own machines", "AI models", "Past run notes"]));
+  B(2, AY, top, "WHAT IT GIVES", lines(["Ticket in, tested pull request out.", "", "Code never leaves the building."]), { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, fs: 13, bold: true, tcol: C.text2 });
+  B(3, AY, hh, "TRUST", "An honest result on every pull request");
+  B(3, AY + hh + g, hh, "HOW TO REACH IT", lines(["Chat", "Ticket tracker"]));
   B(4, AY, top, "WHO IT SERVES", lines(["Delivery engineers", "Junior developers", "Engineering leads"]));
   const by = AY + top + g, bh = AH - top - g, half = AW / 2;
-  cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "GPUs, model calls, and one operator to run the platform", { fill: TINT.orange, tcol: C.accent4 });
+  cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "Machines, computing time, and one person to run it", { fill: TINT.orange, tcol: C.accent4 });
   cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for the hard work; more delivered by the same team", { fill: TINT.green, tcol: C.accent5 });
 }
 
@@ -319,7 +318,7 @@ pres.addSection({ title: S2 });
 {
   const s = canvasSlide({ section: S2, n: 2, stage: "Who?", name: "Persona Card", q: "who exactly are we building for?",
     thumb: "persona", what: "One page about one real kind of user, in their own words.",
-    helps: ["Stops “the user” meaning everyone", "Shows what they fear, too"],
+    ex: "The delivery engineer: “Half my week goes on work I already know how to do.”",
     short: "it is built for the delivery engineer. If their day does not change, nothing else matters.",
     notes: "Three personas exist: delivery engineer (primary), junior developer, engineering lead. Only the primary one is drawn. Honest adoption test: do they file a ticket, or still walk over to a senior? Today, mostly the second." });
   box(s, AX, AY, AW, AH, { name: "Persona card" });
@@ -329,10 +328,10 @@ pres.addSection({ title: S2 });
   txt(s, "“Half my week goes on work I already know how to do.”", { x: AX + 0.2, y: AY + 2.6, w: 2.1, h: 1.3, fontSize: 14, italic: true, color: C.accent1, align: "center" });
   const qx = AX + 2.55, qw = (AW - 2.55 - 0.2 - 0.1) / 2, qh = (AH - 0.4 - 0.1) / 2;
   const Q = [
-    ["THEIR DAY", ["Owns a slice of a live system", "Three to six small tickets a week", "Interrupted often; deep work is rare"], C.background2, C.accent1],
-    ["WHAT THEY WANT", ["Boilerplate and glue done for them", "Keep the interesting design work", "Never hand code to an outside service"], TINT.green, C.accent5],
-    ["WHAT BLOCKS THEM", ["A pull request they do not trust", "A tool that half-finishes and stays quiet", "Setup work before the tool is useful"], TINT.orange, C.accent4],
-    ["WHAT EARNS TRUST", ["It compiles, or it says it failed", "“I could not do this” in the first line", "A second model checked the work"], TINT.teal, C.accent1],
+    ["THEIR DAY", ["Looks after part of a live system", "Three to six small tickets a week", "Interrupted often; little quiet time"], C.background2, C.accent1],
+    ["WHAT THEY WANT", ["Routine code done for them", "Keep the interesting work", "Never hand code to an outside service"], TINT.green, C.accent5],
+    ["WHAT BLOCKS THEM", ["A pull request they do not trust", "A tool that stops half-way and says nothing", "Lots of setup before the tool helps"], TINT.orange, C.accent4],
+    ["WHAT EARNS TRUST", ["It compiles, or it says it failed", "“I could not do this” in the first line", "A second AI checked the work"], TINT.teal, C.accent1],
   ];
   Q.forEach(([t, items, fill, tcol], i) => {
     cell(s, qx + (i % 2) * (qw + 0.1), AY + 0.2 + Math.floor(i / 2) * (qh + 0.1), qw, qh, t,
@@ -344,13 +343,13 @@ pres.addSection({ title: S2 });
 {
   const s = canvasSlide({ section: S2, n: 3, stage: "Who?", name: "Customer Journey Map", q: "where does the person wait, and how does it feel?",
     thumb: "journey", what: "The steps a person goes through, and how each step feels.",
-    helps: ["Finds where people wait", "Shows before and after"],
+    ex: "Today a ticket waits days for a senior. With AIForge the work starts at once.",
     short: "the cost was never the typing — it was the waiting. AIForge removes the wait.",
     notes: "Read the orange line first (today), then the green one (with AIForge). The person now joins at the pull request, not before it." });
   const lw = 1.3, cw = (AW - lw) / 5, x0 = AX + lw;
-  const steps = ["Ticket raised", "Picked up", "Code written", "Tested, reviewed", "Merged"];
-  const today = ["sits in the backlog", "waits for a senior to be free", "squeezed between other work", "rushed at the end", "days after it was raised"];
-  const after = ["picked up as written", "a run starts, nobody waits", "agents write it in a copy of the code", "tests first, second model reviews", "pull request ready to read"];
+  const steps = ["Ticket raised", "Picked up", "Code written", "Tested, checked", "Accepted"];
+  const today = ["sits in the backlog", "waits for a senior to be free", "done between other work", "rushed at the end", "days after it was raised"];
+  const after = ["picked up as written", "a run starts, nobody waits", "agents write it in a copy of the code", "tests first, then a second AI checks", "pull request ready to read"];
   steps.forEach((st, i) => {
     s.addShape(SH.CHEVRON, { x: x0 + i * cw, y: AY, w: cw - 0.03, h: 0.5, fill: { color: C.text2 }, objectName: "Step" });
     txt(s, st, { x: x0 + i * cw + 0.22, y: AY, w: cw - 0.47, h: 0.5, fontSize: 11, bold: true, color: C.background1, align: "center", valign: "middle" });
@@ -379,8 +378,8 @@ pres.addSection({ title: S2 });
 // ---------- 8. Power / Interest Grid ----------
 {
   const s = canvasSlide({ section: S2, n: 4, stage: "Who?", name: "Power / Interest Grid", q: "who must we win over, and who must own it?",
-    thumb: "grid", what: "A two-by-two: each group placed by its say and its stake.",
-    helps: ["Shows who stands where", "Shows who must move"],
+    thumb: "grid", what: "A two-by-two: each group placed by its power and its interest.",
+    ex: "IT and QA must move from watching to owning. The platform needs a second person.",
     short: "the tool works. What is left is people — three jobs still have no owner.",
     notes: "Positions are our reading of where each group stands today; the arrows are the moves the roadmap needs. IT operations must go from watching to owning the model service; QA must own the test gate on AI pull requests; the platform needs a second operator." });
   const gx = AX + 0.45, gy = AY, gw = 5.3, gh = 3.6, qw = gw / 2, qh = gh / 2;
@@ -403,7 +402,7 @@ pres.addSection({ title: S2 });
   const lx = gx + gw + 0.25, lwid = AX + AW - lx;
   box(s, lx, AY, lwid, AH, { fill: C.accent2, lineColor: LINE, name: "Moves card" });
   txt(s, "The moves we need", { x: lx + 0.15, y: AY + 0.15, w: lwid - 0.3, h: 0.35, fontSize: 15, bold: true, color: C.text2 });
-  const moves = [["IT operations", "watching → owning the model service"], ["QA and testers", "affected → owning the test gate"], ["Platform operator", "one person → two"]];
+  const moves = [["IT operations", "watching → owning the AI models"], ["QA and testers", "affected → owning the test check"], ["Platform operator", "one person → two"]];
   moves.forEach(([a, b], i) => {
     txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: lx + 0.15, y: AY + 0.65 + i * 1.08, w: lwid - 0.3, h: 1.0, fontSize: 13 });
   });
@@ -414,8 +413,8 @@ pres.addSection({ title: S3 });
 // ---------- 9. Use Case Card ----------
 {
   const s = canvasSlide({ section: S3, n: 5, stage: "What?", name: "Use Case Card", q: "who starts it, what happens, and what comes out?",
-    thumb: "usecase", what: "One job the system does, told as a short story.",
-    helps: ["Names who starts it", "Ends in a result you can check"],
+    thumb: "usecase", what: "One job the system does: who starts it, the steps, the result.",
+    ex: "An engineer files a ticket. Seven steps later a pull request is ready to read.",
     short: "the senior spends minutes reading instead of hours writing.",
     notes: "The use case is 'one small change'. Simple tickets skip most of the seven steps; only real multi-file work runs them all." });
   const c1 = 2.45, c2 = 3.55, c3 = AW - c1 - c2 - 0.7;
@@ -426,13 +425,13 @@ pres.addSection({ title: S3 });
   pill(s, AX + 0.15, AY + 1.4, c1 - 0.3, 0.36, "Runs several times a week", C.accent3, C.text2);
   cell(s, AX, AY + 2.05, c1, AH - 2.05, "MUST ALREADY BE TRUE", [
     { text: "The ticket names a real project", options: { bullet: { indent: 12 }, breakLine: true } },
-    { text: "The models are loaded and warm", options: { bullet: { indent: 12 }, breakLine: true } },
+    { text: "The AI models are ready", options: { bullet: { indent: 12 }, breakLine: true } },
     { text: "The code builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12.5 });
   arrow(s, AX + c1 + 0.03, AY + AH / 2 - 0.15, 0.3, 0.3);
   const fx = AX + c1 + 0.35;
   box(s, fx, AY, c2, AH, { name: "Main flow" });
   txt(s, "MAIN FLOW", { x: fx + 0.11, y: AY + 0.07, w: c2 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
-  const flow = ["Someone files a ticket in plain words", "The ticket is rewritten so it is clear", "The work is split; one shared plan is written", "Each part is built in its own copy of the code", "Tests are written, then run against the build", "A second model reviews the change", "A pull request opens with an honest verdict"];
+  const flow = ["Someone files a ticket in plain words", "The ticket is rewritten so it is clear", "The work is split; one shared plan is written", "Each part is built in its own copy of the code", "Tests are written, then run against the build", "A second AI checks the change", "A pull request opens with an honest result"];
   flow.forEach((t, i) => {
     const y = AY + 0.4 + i * 0.515;
     num(s, fx + 0.12, y + 0.07, i + 1, 0.34, i === 6 ? C.accent4 : C.accent1);
@@ -442,7 +441,7 @@ pres.addSection({ title: S3 });
   const ox = fx + c2 + 0.35;
   box(s, ox, AY, c3, AH, { fill: TINT.green, lineColor: HEX.accent5, name: "Outcome" });
   txt(s, "OUTCOME", { x: ox + 0.11, y: AY + 0.07, w: c3 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
-  const outs = [["A pull request", "a person reviews"], ["Or a first line", "saying it could not"], ["Either way", "a run history for audit"]];
+  const outs = [["A pull request", "a person reviews"], ["Or a first line", "saying it could not"], ["Either way", "a record of the run"]];
   outs.forEach(([a, b], i) => txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: ox + 0.11, y: AY + 0.5 + i * 1.15, w: c3 - 0.2, h: 1.0, fontSize: 12.5 }));
 }
 
@@ -450,33 +449,33 @@ pres.addSection({ title: S3 });
 {
   const s = canvasSlide({ section: S3, n: 6, stage: "What?", name: "Context View", q: "what is inside the system, and what does it touch?",
     thumb: "context", what: "The system as one box, with what goes in and what comes out.",
-    helps: ["Draws the edge of the system", "Lists the risks at that edge"],
+    ex: "Tickets and code go in. A pull request comes out. All of it stays on our own machines.",
     short: "write the unknowns down, not just the boxes — the edges are where runs fail.",
     notes: "The dashed line is the system boundary. Everything inside runs on hardware we own. The assumptions and warnings below matter as much as the diagram." });
   const iw = 2.3, cwid = 2.6, cx = AX + iw + 0.64, ox = cx + cwid + 0.64, th = 2.3;
   txt(s, "GOES IN", { x: AX, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   txt(s, "COMES OUT", { x: ox, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
-  const ins = ["Tickets from the tracker", "The code and its history", "Past runs and lessons"], outs = ["A pull request", "A run history for audit", "New lessons stored"];
+  const ins = ["Tickets from the tracker", "The code and its history", "Past runs and lessons"], outs = ["A pull request", "A record of the run", "New lessons stored"];
   ins.forEach((t, i) => cell(s, AX, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.teal }));
   outs.forEach((t, i) => cell(s, ox, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.green, lineColor: HEX.accent5 }));
   arrow(s, AX + iw + 0.12, AY + 1.0, 0.4, 0.4);
   arrow(s, cx + cwid + 0.12, AY + 1.0, 0.4, 0.4, C.accent5);
   box(s, cx - 0.08, AY, cwid + 0.16, th, { fill: C.background2, lineColor: HEX.accent4, lw: 1.75, dash: "dash", r: 0.12, name: "System boundary" });
   s.addShape(SH.RECTANGLE, { x: cx + 0.08, y: AY + 0.38, w: cwid - 0.16, h: th - 0.54, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "AIForge" });
-  txt(s, "our own hardware", { x: cx, y: AY + 0.07, w: cwid, h: 0.26, fontSize: 11, italic: true, color: C.accent4, align: "center" });
-  txt(s, [{ text: "AIForge", options: { fontSize: 20, bold: true, color: C.accent2, breakLine: true } }, { text: "Plans the work", options: { breakLine: true } }, { text: "Writes and tests code", options: { breakLine: true } }, { text: "Reviews and merges" }],
+  txt(s, "our own machines", { x: cx, y: AY + 0.07, w: cwid, h: 0.26, fontSize: 11, italic: true, color: C.accent4, align: "center" });
+  txt(s, [{ text: "AIForge", options: { fontSize: 20, bold: true, color: C.accent2, breakLine: true } }, { text: "Plans the work", options: { breakLine: true } }, { text: "Writes and tests code", options: { breakLine: true } }, { text: "Checks and joins it" }],
     { x: cx + 0.2, y: AY + 0.42, w: cwid - 0.4, h: th - 0.62, fontSize: 13, color: C.background1, align: "center", valign: "middle" });
   const by = AY + th + 0.15, bh = AH - th - 0.15, bw = (AW - 0.12) / 2;
   const bl = (a) => a.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < a.length - 1 } }));
-  cell(s, AX, by, bw, bh, "WHAT WE ASSUME", bl(["Models are loaded the right way", "Models stay warm, or runs stop mid-way", "The ticket names a real project"]), { fs: 12.5 });
-  cell(s, AX + bw + 0.12, by, bw, bh, "WHAT TO BEWARE OF", bl(["About 3–5 files is today's ceiling", "Some languages still beat the smaller models", "Shared GPUs limit how many tickets run at once"]), { fs: 12.5, fill: TINT.orange, tcol: C.accent4 });
+  cell(s, AX, by, bw, bh, "WHAT WE ASSUME", bl(["The AI models are set up right", "The models stay ready, or runs stop half-way", "The ticket names a real project"]), { fs: 12.5 });
+  cell(s, AX + bw + 0.12, by, bw, bh, "WHAT TO BEWARE OF", bl(["About 3–5 files is today's limit", "Some coding languages are too hard for small models", "Shared machines limit how many tickets run at once"]), { fs: 12.5, fill: TINT.orange, tcol: C.accent4 });
 }
 
 // ---------- 11. Service Blueprint ----------
 {
   const s = canvasSlide({ section: S3, n: 7, stage: "What?", name: "Service Blueprint", q: "what does the person see, and what runs behind it?",
     thumb: "blueprint", what: "The service in layers: what people see on top, the machinery below.",
-    helps: ["Shows what stays hidden", "Finds work nobody owns"],
+    ex: "The person files a ticket and reads the result. The agents do the rest, out of sight.",
     short: "above the line there are two moments: file it, read it. The design work is all below.",
     notes: "Everything below the dashed line runs without anyone watching. In a live demo, the progress panel shows the 'back stage' row as it happens." });
   const lw = 1.55, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.6, pitch = 0.65;
@@ -485,11 +484,11 @@ pres.addSection({ title: S3 });
     txt(s, `${i + 1}. ${c}`, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle" });
   });
   const rows = [
-    ["The person sees", ["the ticket they wrote", "a run in progress", "test output", "a pull request and a verdict"], C.background1, C.accent1],
-    ["The person does", ["files it, in plain words", "nothing — goes elsewhere", "nothing", "reads, comments, merges"], C.background1, C.accent1],
+    ["The person sees", ["the ticket they wrote", "a run in progress", "test output", "a pull request and a result"], C.background1, C.accent1],
+    ["The person does", ["files it, in plain words", "nothing — goes elsewhere", "nothing", "reads, comments, accepts"], C.background1, C.accent1],
     ["The system shows", ["ticket is picked up", "a copy of the code opens", "build check runs", "pull request opens"], TINT.teal, C.accent1],
-    ["Agents (hidden)", ["make the ticket clear", "plan, then write", "test, review, join up", "write the verdict"], C.accent3, C.text2],
-    ["Platform (hidden)", ["ticket store", "model service on our GPUs", "build tools, test runners", "run history, lessons kept"], C.accent3, C.text2],
+    ["Agents (hidden)", ["make the ticket clear", "plan, then write", "test, check, join up", "write the result"], C.accent3, C.text2],
+    ["Platform (hidden)", ["ticket store", "AI models on our machines", "build tools, test runners", "run history, lessons kept"], C.accent3, C.text2],
   ];
   rows.forEach(([label, vals, fill, col], r) => {
     const y = AY + 0.47 + r * pitch + (r > 2 ? 0.3 : 0);
@@ -505,18 +504,18 @@ pres.addSection({ title: S3 });
 {
   const s = canvasSlide({ section: S3, n: 8, stage: "What?", name: "Business Capability Map", q: "what must the business be good at — and who does it today?",
     thumb: "capmap", what: "A grid of everything the business must be able to do.",
-    helps: ["The whole job in one view", "Colour shows what is covered"],
-    short: "11 of 18 done by AIForge today, 3 partly. The rest is an ownership gap.",
+    ex: "AIForge does 11 of the 18 jobs today and 3 more in part. The rest is still all people.",
+    short: "11 of 18 done by AIForge today, 3 partly. The rest still needs an owner.",
     notes: "Blue = AIForge does this today. Yellow = partly, being built. White = still all people. The white boxes are mostly about ownership: prioritising, merging, measuring." });
   const cw = AW / 6;
   const D = "d", P = "p", H = "h";
   const cols = [
-    ["Understand demand", [["Capture a ticket", H], ["Clarify what is wanted", D], ["Prioritise", H]]],
+    ["Understand the ask", [["Capture a ticket", H], ["Clarify what is wanted", D], ["Prioritise", H]]],
     ["Design the change", [["Read the codebase", D], ["Split the work", D], ["Agree how parts connect", D]]],
     ["Build the change", [["Write the code", D], ["Join files together", D], ["Keep to standards", P]]],
     ["Prove quality", [["Write tests", D], ["Run the build", D], ["Second check", D]]],
-    ["Release and operate", [["Open a pull request", D], ["Merge", H], ["Run the platform", P]]],
-    ["Learn and improve", [["Keep lessons", D], ["Share across the team", P], ["Measure adoption", H]]],
+    ["Release and run", [["Open a pull request", D], ["Accept the change", H], ["Run the platform", P]]],
+    ["Learn and improve", [["Keep lessons", D], ["Share across the team", P], ["Measure use", H]]],
   ];
   const fill = { d: C.accent3, p: C.accent2, h: C.background1 };
   cols.forEach(([head, items], i) => {
@@ -536,9 +535,9 @@ pres.addSection({ title: S3 });
 // ---------- 13. Capability Card ----------
 {
   const s = canvasSlide({ section: S3, n: 9, stage: "What?", name: "Capability Card", q: "what does one ability need — people, process, tools?",
-    thumb: "capcard", what: "One ability taken apart: people, process and tools.",
-    helps: ["Shows how mature it is", "The gap becomes the to-do list"],
-    short: "raise it with bigger local models, shared memory, and a named owner for the platform.",
+    thumb: "capcard", what: "One ability taken apart: people, process, tools, and how grown-up it is.",
+    ex: "“Build the change” is rated Good. The gap: 3–5 files today, 8–10 wanted.",
+    short: "to improve: bigger AI models, shared memory, and a named owner for the platform.",
     notes: "This card is for the capability 'Build the change'. Maturity today is Good. The weakest link overall is memory: it works, but sharing it across the team is only now being built." });
   box(s, AX, AY, AW, 0.78, { name: "Capability header" });
   txt(s, [{ text: "BUILD THE CHANGE", options: { fontSize: 11, bold: true, color: C.accent1, breakLine: true } }, { text: "Turn an agreed plan into code that builds and fits the project." }],
@@ -551,9 +550,9 @@ pres.addSection({ title: S3 });
   });
   const cw = (AW - 0.24) / 3, cy = AY + 0.9, ch = 2.15;
   const cols = [
-    ["People", ["One platform operator today", "Delivery engineer reviews the output", "Nobody named for the model service"], C.accent1],
-    ["Process", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is merged"], C.text2],
-    ["Tools", ["Local models on hardware we own", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
+    ["People", ["One person runs the platform today", "Delivery engineer reviews the output", "Nobody owns the AI models yet"], C.accent1],
+    ["Process", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is accepted"], C.text2],
+    ["Tools", ["AI models on our own machines", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
   ];
   cols.forEach(([h, items, col], i) => {
     const x = AX + i * (cw + 0.12);
@@ -565,7 +564,7 @@ pres.addSection({ title: S3 });
   const gy = cy + ch + 0.12, gh = AH - (gy - AY);
   box(s, AX, gy, AW, gh, { fill: TINT.orange, lineColor: HEX.accent4, name: "Gap to target" });
   txt(s, "GAP TO TARGET", { x: AX + 0.15, y: gy + 0.07, w: 3, h: 0.26, fontSize: 11, bold: true, color: C.accent4 });
-  ["Ceiling is 3–5 files; target is 8–10", "Memory not yet shared across the team", "Second operator not trained"].forEach((t, i) => {
+  ["Limit is 3–5 files; we want 8–10", "Memory not yet shared across the team", "No second person trained yet"].forEach((t, i) => {
     txt(s, t, { x: AX + 0.15 + i * (AW - 0.3) / 3, y: gy + 0.34, w: (AW - 0.3) / 3 - 0.15, h: gh - 0.38, fontSize: 12.5, bold: true, color: C.text1 });
   });
 }
@@ -576,7 +575,7 @@ pres.addSection({ title: S4 });
 {
   const s = canvasSlide({ section: S4, n: 10, stage: "How?", name: "ASR Card", q: "which few rules shape the whole design?",
     thumb: "asr", what: "ASR = a must-have rule. Break it and the whole design fails.",
-    helps: ["Picks the few rules that matter", "Puts the risk next to the rule"],
+    ex: "Three rules: do the job alone, make the files fit together, stay on our machines.",
     short: "three rules hold up the whole design. Break any one and the tool is not worth using.",
     notes: "ASR stands for architecturally significant requirement. Each card states the rule, how critical it is, what it risks or costs, and the proof that it holds. Picture them as three pillars: take one away and the roof falls. These cards drive the decision record and the QATT card that follow." });
   s.addShape(SH.ISOSCELES_TRIANGLE, { x: AX, y: AY, w: AW, h: 0.42, fill: { color: C.text2 }, objectName: "Roof" });
@@ -587,7 +586,7 @@ pres.addSection({ title: S4 });
   const asr = [
     ["Do the job on its own", "Ticket in, pull request out. Nobody in the middle.", "RISK", "Bad automatic changes destroy trust fast.", "First full run: ticket to pull request with no help.", "HIGH"],
     ["Make the files fit together", "Change five files and they still build as one.", "RISK", "Big tickets look done but do not build.", "0 → 53 working linked lines with a shared plan.", "HIGH"],
-    ["Stay on our machines", "Hardware we own. No cloud. Works offline.", "COST", "Local models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
+    ["Stay on our machines", "Machines we own. No cloud. Works offline.", "COST", "Our own AI models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
   ];
   asr.forEach(([h, b, rl, rk, p, lvl], i) => {
     const x = AX + sp + i * (cw + sp), hi = lvl === "HIGH";
@@ -606,11 +605,11 @@ pres.addSection({ title: S4 });
 {
   const s = canvasSlide({ section: S4, n: 11, stage: "How?", name: "QATT Card", q: "how do we turn “it must be good” into a number?",
     thumb: "qatt", what: "A quality written as a test: who does what, and what we measure.",
-    helps: ["Turns a wish into pass or fail", "Gives every rule a number"],
+    ex: "A five-file ticket must come out as one change that builds. Measured: 0 → 53 working lines.",
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
     notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
   txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
-  const parts = [["WHO", "A delivery engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run, local models, no cloud"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
+  const parts = [["WHO", "A delivery engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
   const pw = AW / 6;
   parts.forEach(([t, b], i) => {
     const last = i === 5;
@@ -622,7 +621,7 @@ pres.addSection({ title: S4 });
   const more = [
     ["Nothing leaves our network", "A check fails the build if it would call out", "Running today, small batch", C.accent5],
     ["We know the size limit", "Count files one ticket handles cleanly", "3–5 files now", C.accent4],
-    ["Team memory does not bloat", "Count duplicate notes each week", "Merge step designed", C.accent6],
+    ["Team memory does not grow too big", "Count duplicate notes each week", "Merge step designed", C.accent6],
   ];
   const cw = (AW - 0.24) / 3, my = AY + 2.32, mh = AH - 2.32;
   more.forEach(([h, chk, st, col], i) => {
@@ -637,13 +636,13 @@ pres.addSection({ title: S4 });
 // ---------- 16. Decision Record (ADR) ----------
 {
   const s = canvasSlide({ section: S4, n: 12, stage: "How?", name: "Decision Record (ADR)", q: "what did we decide, what else did we consider, and why?",
-    thumb: "adr", what: "A short record of one choice: what we picked, what we dropped, why.",
-    helps: ["Nobody re-argues it later", "Forces real options"],
+    thumb: "adr", what: "A short note of one choice: what we picked, what we dropped, and why.",
+    ex: "We picked many small agents. We dropped the ready-made tool, one big model, and cloud AI.",
     short: "we did not pick it because we liked it — it is the one our tests kept passing.",
     notes: "Myth we tested: 'just wait for a bigger model'. Same models, same machines — only splitting the work differently fixed it. The decisions log has four settled decisions and three still open, all about team memory." });
-  cell(s, AX, AY, AW, 0.86, "CONTEXT", "Our local models hold about 3–5 files at once. A multi-file ticket must still build as one piece — and no code may leave.", { fs: 12.5 });
+  cell(s, AX, AY, AW, 0.86, "THE SITUATION", "Our AI models hold about 3–5 files at once. A many-file ticket must still build as one piece, and no code may leave.", { fs: 12.5 });
   const ow = (AW - 0.36) / 4, oy = AY + 0.94, oh = 1.38;
-  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "0 linked lines on a multi-file ticket.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Many small agents", "0 → 53 linked lines. Builds before every merge.", true]];
+  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "0 working lines on a many-file ticket.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Many small agents", "0 → 53 working lines. Always builds first.", true]];
   opts.forEach(([h, b, pick], i) => {
     const x = AX + i * (ow + 0.12);
     box(s, x, oy, ow, oh, { fill: pick ? C.accent1 : C.background1, lineColor: pick ? HEX.accent1 : HEX.accent3, name: "Option" });
@@ -653,9 +652,9 @@ pres.addSection({ title: S4 });
   });
   const dy = oy + oh + 0.08, dh = AH - (dy - AY), w1 = 3.05, w2 = 3.05, w3 = AW - w1 - w2 - 0.24;
   cell(s, AX, dy, w1, dh, "DECISION — WE WILL…", "finish each ticket with a line of small agents, each with one small job. Simple tickets skip the line.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 12.5, bold: true });
-  cell(s, AX + w1 + 0.12, dy, w2, dh, "CONSEQUENCES", [
+  cell(s, AX + w1 + 0.12, dy, w2, dh, "WHAT FOLLOWS", [
     { text: "+ ", options: { bold: true, color: C.accent5 } }, { text: "each role is checked on its own; a bad part fails alone", options: { breakLine: true } },
-    { text: "– ", options: { bold: true, color: C.accent4 } }, { text: "more model calls, more waiting, more moving parts" }], { fs: 12.5 });
+    { text: "– ", options: { bold: true, color: C.accent4 } }, { text: "more AI calls, more waiting, more moving parts" }], { fs: 12.5 });
   const rx = AX + w1 + w2 + 0.24;
   box(s, rx, dy, w3, dh, { name: "Characteristics" });
   txt(s, "CAN WE UNDO IT?", { x: rx + 0.11, y: dy + 0.07, w: w3 - 0.22, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
@@ -663,7 +662,7 @@ pres.addSection({ title: S4 });
   s.addShape(SH.OVAL, { x: rx + 0.42, y: dy + 0.41, w: 0.22, h: 0.22, fill: { color: C.accent5 }, objectName: "Reversibility marker" });
   txt(s, "easy to undo", { x: rx + 0.11, y: dy + 0.66, w: w3 / 2, h: 0.22, fontSize: 10, color: C.accent6 });
   txt(s, "permanent", { x: rx + w3 / 2, y: dy + 0.66, w: w3 / 2 - 0.11, h: 0.22, fontSize: 10, color: C.accent6, align: "right" });
-  txt(s, [{ text: "Bias checked: ", options: { bold: true } }, { text: "“more agents must be better”", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.94, w: w3 - 0.22, h: dh - 1.0, fontSize: 12 });
+  txt(s, [{ text: "Belief we tested: ", options: { bold: true } }, { text: "“more agents must be better”", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.94, w: w3 - 0.22, h: dh - 1.0, fontSize: 12 });
 }
 
 pres.addSection({ title: S5 });
@@ -672,16 +671,16 @@ pres.addSection({ title: S5 });
 {
   const s = canvasSlide({ section: S5, n: 13, stage: "Where next?", name: "OKR Card", q: "what does good look like, in numbers we can check?",
     thumb: "okr", what: "OKR = one goal, and a few numbers that show progress.",
-    helps: ["A goal everyone can repeat", "Shows honestly where we are"],
+    ex: "Goal: small work is done this way. Target: 3 in 4 tickets accepted. Not measured yet.",
     short: "the tool works; now we must measure how often it succeeds. The first row is the problem.",
     notes: "Without the first number there is no case to make this standard practice. Bars show how far today is from target; the dashed bar means we do not measure it yet." });
   s.addShape(SH.RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
-  txt(s, [{ text: "OBJECTIVE   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.4, h: 0.68, fontSize: 16, valign: "middle" });
+  txt(s, [{ text: "GOAL   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.4, h: 0.68, fontSize: 16, valign: "middle" });
   const kx = AX, kw = 3.45, bx = AX + 3.6, bw = 2.5, tx = bx + bw + 0.15, tw = 1.15, gx2 = tx + tw + 0.05, gw = AX + AW - gx2;
   const hy = AY + 0.76;
-  [["KEY RESULT", kx, kw, "left"], ["PROGRESS TO TARGET", bx, bw, "left"], ["TODAY", tx, tw, "center"], ["TARGET", gx2, gw, "center"]].forEach(([t, x, w, a]) => txt(s, t, { x, y: hy, w, h: 0.24, fontSize: 10, bold: true, color: C.accent6, align: a }));
+  [["WHAT WE MEASURE", kx, kw, "left"], ["PROGRESS TO TARGET", bx, bw, "left"], ["TODAY", tx, tw, "center"], ["TARGET", gx2, gw, "center"]].forEach(([t, x, w, a]) => txt(s, t, { x, y: hy, w, h: 0.24, fontSize: 10, bold: true, color: C.accent6, align: a }));
   const krs = [
-    ["Tickets that end in a merged pull request", null, "Not measured", "3 in 4", C.accent4],
+    ["Tickets that end in an accepted pull request", null, "Not measured", "3 in 4", C.accent4],
     ["Files one ticket can change cleanly", 0.45, "3 to 5", "8 to 10", C.accent4],
     ["Tickets filed by people other than the leads", 0.06, "Almost none", "Half", C.accent4],
     ["People who can run and fix the platform", 0.5, "1", "2", C.accent4],
@@ -704,8 +703,8 @@ pres.addSection({ title: S5 });
 {
   const s = canvasSlide({ section: S5, n: 14, stage: "Where next?", name: "Roadmap Canvas", q: "what happens when — for product, platform and people?",
     thumb: "roadmap", what: "The plan over time: product, platform and people together.",
-    helps: ["People and process, not only code", "Shows what comes first"],
-    short: "one rule for the whole year: nothing on this roadmap moves work off our own hardware.",
+    ex: "From an honest result on every pull request now, to open for every team by the end of the year.",
+    short: "one rule for the whole year: nothing on this plan moves work off our own machines.",
     notes: "Read each row left to right. The people row is the one most likely to slip, and it is the one the power/interest grid said matters most." });
   const lw = 1.3, cw = (AW - lw) / 4, x0 = AX + lw;
   ["Q1", "Q2", "Q3", "Q4"].forEach((q, i) => {
@@ -713,9 +712,9 @@ pres.addSection({ title: S5 });
     txt(s, q, { x: x0 + i * cw, y: AY, w: cw, h: 0.5, fontSize: 15, bold: true, color: C.background1, align: "center", valign: "middle" });
   });
   const rows = [
-    ["Product", ["Honest verdict on every pull request", "Team memory sharing live", "Bigger tickets, more files", "Open to every team"], C.accent1, TINT.teal],
-    ["Platform", ["GPU upgrade sized", "Bigger local models tested", "Model service run by IT operations", "Capacity planned ahead"], C.accent4, TINT.orange],
-    ["People", ["Second operator named", "QA owns the test gate", "Juniors onboarded", "Adoption measured monthly"], C.accent5, TINT.green],
+    ["Product", ["Honest result on every pull request", "Team memory sharing live", "Bigger tickets, more files", "Open to every team"], C.accent1, TINT.teal],
+    ["Platform", ["Bigger machines planned", "Bigger AI models tested", "IT runs the AI models", "Machine needs planned ahead"], C.accent4, TINT.orange],
+    ["People", ["Second person named", "QA owns the test check", "Juniors start using it", "Use measured every month"], C.accent5, TINT.green],
   ];
   const ry = AY + 0.6, pitch = (AH - 0.6) / 3;
   rows.forEach(([label, vals, col, fill], r) => {
@@ -741,7 +740,7 @@ pres.addSection({ title: S6 });
     ["ASR Card", "So it must do the job on its own."],
     ["Decision Record", "So we use a line of small agents."],
     ["QATT Card", "Proof: 0 → 53 linked lines."],
-    ["OKR Card", "Next: 3 in 4 tickets end in a merge."],
+    ["OKR Card", "Next: 3 in 4 tickets accepted."],
   ];
   const w = 1.72, gap = (12.13 - 6 * w) / 5;
   chain.forEach(([c, t], i) => {
