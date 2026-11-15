@@ -126,39 +126,28 @@ function thumb(s, kind, x, y, w, h) {
   });
 }
 
-// left panel "how to read it", one per canvas
-const READ = {
-  bmc: ["Left → what it takes", "Middle → the value", "Right → who it is for", "Bottom → cost against payback"],
-  persona: ["Left → who they are", "Top right → their day, wants", "Bottom right → blocks, trust"],
-  journey: ["Left to right → one ticket's life", "Lines → how it feels", "Orange = today · Green = AIForge"],
-  grid: ["Up → more power", "Right → more interest", "Corner → how to treat them", "Orange → a job with no owner"],
-  usecase: ["Left → who starts it", "Middle → the 7 steps", "Right → what comes out"],
-  context: ["Left → what AIForge reads", "Middle → AIForge, on our machines", "Right → what it writes back", "Bottom → assumptions and limits"],
-  blueprint: ["Left to right → one ticket", "Above the line → the person", "Below the line → AIForge, unseen"],
-  capmap: ["Columns → stages of a change", "Each box → one ability", "Grey = AIForge · Yellow = partly", "Dashed = people only"],
-  capcard: ["Top → the ability and its rating", "Middle → people, process, tools", "Bottom → what is missing"],
-  asr: ["Each pillar → one rule", "Badge → how important it is", "Green box → proof it holds"],
-  qatt: ["Top row → read as one sentence", "Orange box → the number", "Bottom → more checks, in short"],
-  adr: ["Top → the problem", "Middle → the options, one chosen", "Bottom → decision, effect, undo"],
-  okr: ["Dark bar → the goal", "Each row → one number, and why", "Compare today with the target"],
-  roadmap: ["Columns → quarters", "Rows → product, platform, people", "Read each row left to right"],
-};
-// canvas slide frame: left = what the canvas is, right = the canvas itself filled for AIForge
-const AX = 4.25, AY = 1.9, AW = 8.48, AH = 4.05;
-function canvasSlide(o) {
-  const s = content(o.section, o.name, [{ text: "It answers:  ", options: { bold: true, color: C.accent1 } }, { text: o.q }]);
-  sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
-  // left panel: three equal boxes, same type size, label strip on top
-  const pw = 3.2, gap = 0.12, ph = (AH - 2 * gap) / 3;
-  [["WHAT IT IS", o.what, C.background1], ["HOW TO READ IT", lines(READ[o.thumb]), C.background1], ["IN AIFORGE", o.ex, C.accent2]].forEach(([label, body, fill], i) => {
-    const y = AY + i * (ph + gap);
-    box(s, 0.6, y, pw, ph, { fill, r: 0, name: label });
-    s.addShape(SH.RECTANGLE, { x: 0.6, y, w: pw, h: 0.3, fill: { color: i === 2 ? C.accent1 : C.accent3 }, line: { color: LINE, width: 0.75 }, objectName: label + " label" });
-    txt(s, label, { x: 0.72, y, w: pw - 0.24, h: 0.3, fontSize: 10.5, bold: true, color: i === 2 ? C.background1 : C.text2, valign: "middle", charSpacing: 1 });
-    txt(s, body, { x: 0.72, y: y + 0.36, w: pw - 0.24, h: ph - 0.42, fontSize: 12, valign: "top" });
+// canvas slide frame: the canvas uses the full width. Small numbered squares sit on the canvas;
+// one key line under it says what each number means; "In AIForge" is the bottom line.
+const AX = 0.6, AY = 1.95, AW = 12.13, AH = 3.65;
+function mark(s, x, y, n) {
+  s.addShape(SH.RECTANGLE, { x, y, w: 0.26, h: 0.26, fill: { color: C.accent1 }, line: { color: "FFFFFF", width: 1 }, objectName: "Marker " + n });
+  txt(s, String(n), { x, y, w: 0.26, h: 0.26, fontSize: 11, bold: true, color: C.background1, align: "center", valign: "middle" });
+}
+function keyLine(s, labels) {
+  const y = AY + AH + 0.1;
+  let x = AX;
+  labels.forEach((t, i) => {
+    mark(s, x, y + 0.02, i + 1);
+    const w = t.length * 0.097 + 0.15;
+    txt(s, t, { x: x + 0.33, y, w, h: 0.3, fontSize: 12, valign: "middle", color: C.text2 });
+    x += 0.33 + w + 0.3;
   });
-  inShort(s, o.short);
-  s.addNotes(o.notes);
+}
+function canvasSlide(o) {
+  const s = content(o.section, o.name, o.what);
+  sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
+  txt(s, [{ text: "In AIForge:  ", options: { bold: true, color: C.accent1 } }, { text: o.ex }], { x: 0.6, y: 6.2, w: 12.13, h: 0.6, fontSize: 16, valign: "middle" });
+  s.addNotes(`It answers: ${o.q}\nIn short: ${o.short}\n\n${o.notes}`);
   return s;
 }
 
@@ -321,7 +310,7 @@ pres.addSection({ title: S2 });
     ex: "Ticket in, tested pull request out. Costs machines and one person; gives senior hours back.",
     short: "AIForge sells nothing. It gives senior hours back, inside our own walls.",
     notes: "This is the internal-product view of the business model: the 'customers' are our own senior developers, junior developers and QA engineers (who use it for test automation), and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
-  const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
+  const cw = AW / 5, g = 0.07, top = 2.6, hh = (top - g) / 2;
   const B = (i, y, h, t, b, o) => cell(s, AX + i * cw, y, cw - g, h, t, b, o);
   B(0, AY, top, "WHO HELPS", lines(["IT operations", "Platform operator"]), { hint: "partners it relies on" });
   B(1, AY, hh, "WHAT IT DOES", "Plan, write, test, check", { hint: "its main work" });
@@ -332,7 +321,10 @@ pres.addSection({ title: S2 });
   B(4, AY, top, "WHO IT SERVES", lines(["Senior developers", "Junior developers", "QA engineers (test automation)"]), { hint: "the users" });
   const by = AY + top + g, bh = AH - top - g, half = AW / 2;
   cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "Machines, computing time, and one person to run it", { hint: "what we spend to run it", fill: TINT.orange, tcol: C.accent4 });
-  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for hard work; juniors move faster; QA gets tests written for them", { hint: "the payback: time, not money", fill: TINT.green, tcol: C.accent5 });
+  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed; juniors move faster; QA gets tests written", { hint: "the payback: time, not money", fill: TINT.green, tcol: C.accent5 });
+  mark(s, AX + cw - g - 0.34, AY + 0.06, 1); mark(s, AX + 3 * cw - g - 0.34, AY + 0.06, 2);
+  mark(s, AX + 5 * cw - g - 0.34, AY + 0.06, 3); mark(s, AX + half - g - 0.34, by + 0.06, 4);
+  keyLine(s, ["what it takes to run", "the value it gives", "who it is for", "cost against payback"]);
 }
 
 // ---------- 6. Persona Card ----------
@@ -343,14 +335,14 @@ pres.addSection({ title: S2 });
     short: "built for senior developers first, then juniors and QA engineers.",
     notes: "Three personas exist: senior developer (primary), junior developer, QA engineer (uses AIForge to write and run automated tests). Only the primary one is drawn in full. Honest adoption test: does a junior or QA engineer file a ticket, or still walk over to a senior? Today, mostly the second." });
   box(s, AX, AY, AW, AH, { name: "Persona card" });
-  person(s, AX + 0.6, AY + 0.2, 1.2);
-  pill(s, AX + 0.45, AY + 1.5, 1.6, 0.32, "PRIMARY PERSONA", C.accent1, C.background1);
-  txt(s, "Senior developer", { x: AX + 0.1, y: AY + 1.88, w: 2.3, h: 0.35, fontSize: 15, bold: true, color: C.text2, align: "center" });
-  txt(s, "“Half my week goes on work I already know how to do.”", { x: AX + 0.2, y: AY + 2.25, w: 2.1, h: 0.85, fontSize: 13, italic: true, color: C.accent1, align: "center" });
+  person(s, AX + 0.65, AY + 0.12, 1.05);
+  pill(s, AX + 0.38, AY + 1.24, 1.6, 0.3, "PRIMARY PERSONA", C.accent1, C.background1);
+  txt(s, "Senior developer", { x: AX + 0.03, y: AY + 1.58, w: 2.3, h: 0.35, fontSize: 15, bold: true, color: C.text2, align: "center" });
+  txt(s, "“Half my week goes on work I already know how to do.”", { x: AX + 0.13, y: AY + 1.95, w: 2.1, h: 0.7, fontSize: 12.5, italic: true, color: C.accent1, align: "center" });
   txt(s, [{ text: "ALSO FOR", options: { fontSize: 10, bold: true, color: C.accent6, breakLine: true } },
     { text: "Junior developers", options: { bold: true, breakLine: true } }, { text: "help without waiting for a senior", options: { breakLine: true } },
     { text: "QA engineers", options: { bold: true, breakLine: true } }, { text: "test automation written for them" }],
-    { x: AX + 0.05, y: AY + 3.0, w: 2.45, h: 0.98, fontSize: 10, align: "center" });
+    { x: AX + 0.0, y: AY + 2.62, w: 2.45, h: 0.98, fontSize: 10, align: "center" });
   const qx = AX + 2.55, qw = (AW - 2.55 - 0.2 - 0.1) / 2, qh = (AH - 0.4 - 0.1) / 2;
   const Q = [
     ["THEIR DAY", ["Owns the hard parts of a live system", "Juniors and QA ask them for help all day", "Little quiet time for deep work"], C.background2, C.accent1],
@@ -362,6 +354,8 @@ pres.addSection({ title: S2 });
     cell(s, qx + (i % 2) * (qw + 0.1), AY + 0.2 + Math.floor(i / 2) * (qh + 0.1), qw, qh, t,
       items.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < items.length - 1 } })), { fill, tcol, fs: 12.5 });
   });
+  mark(s, AX + 2.15, AY + 0.1, 1); mark(s, qx + qw - 0.34, AY + 0.26, 2); mark(s, qx + qw - 0.34, AY + 0.2 + qh + 0.16, 3);
+  keyLine(s, ["who they are, in their own words", "their day and what they want", "what blocks them, what earns trust"]);
 }
 
 // ---------- 7. Customer Journey Map ----------
@@ -380,10 +374,10 @@ pres.addSection({ title: S2 });
     txt(s, st, { x: x0 + i * cw + 0.22, y: AY, w: cw - 0.47, h: 0.5, fontSize: 11, bold: true, color: C.background1, align: "center", valign: "middle" });
   });
   // feeling curve
-  const fy = AY + 0.6, fh = 1.15;
+  const fy = AY + 0.6, fh = 1.05;
   box(s, x0, fy, AW - lw - 0.03, fh, { name: "Feeling band" });
   txt(s, [{ text: "How it feels", options: { bold: true, breakLine: true } }, { text: "good at the top", options: { fontSize: 10, color: C.accent6, breakLine: true } }, { text: "orange = today", options: { fontSize: 10, color: C.accent4, breakLine: true } }, { text: "green = AIForge", options: { fontSize: 10, color: C.accent5 } }], { x: AX, y: fy, w: lw - 0.1, h: fh, fontSize: 13, color: C.text2, valign: "middle" });
-  const moodY = (m) => fy + fh - 0.2 - (m - 1) * 0.19;
+  const moodY = (m) => fy + fh - 0.2 - (m - 1) * 0.165;
   const curve = (moods, color) => {
     const pts = moods.map((m, i) => [x0 + i * cw + cw / 2, moodY(m)]);
     pts.forEach((p, i) => { if (i) seg(s, pts[i - 1][0], pts[i - 1][1], p[0], p[1], color, 2.5); });
@@ -393,11 +387,13 @@ pres.addSection({ title: S2 });
   curve([4, 5, 4, 4, 5], HEX.accent5);
   const rows = [["Today", today, TINT.orange, C.accent4], ["With AIForge", after, TINT.green, C.accent5]];
   rows.forEach(([label, vals, fill, col], r) => {
-    const y = fy + fh + 0.1 + r * 1.1;
-    s.addShape(SH.RECTANGLE, { x: AX, y, w: lw - 0.1, h: 1.0, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
-    txt(s, label, { x: AX + 0.05, y, w: lw - 0.2, h: 1.0, fontSize: 14, bold: true, color: C.background1, align: "center", valign: "middle" });
-    vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, 1.0, null, v, { fill, lineColor: fill, align: "center", fs: 12 }));
+    const y = fy + fh + 0.1 + r * 0.98;
+    s.addShape(SH.RECTANGLE, { x: AX, y, w: lw - 0.1, h: 0.9, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
+    txt(s, label, { x: AX + 0.05, y, w: lw - 0.2, h: 0.9, fontSize: 14, bold: true, color: C.background1, align: "center", valign: "middle" });
+    vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, 0.9, null, v, { fill, lineColor: fill, align: "center", fs: 12 }));
   });
+  mark(s, AX + 0.45, AY + 0.12, 1); mark(s, x0 + 0.08, fy + 0.08, 2); mark(s, x0 + 0.06, fy + fh + 0.16, 3);
+  keyLine(s, ["the steps of one ticket", "how each step feels: orange = today, green = AIForge", "what happens at each step"]);
 }
 
 // ---------- 8. Power / Interest Grid ----------
@@ -407,7 +403,7 @@ pres.addSection({ title: S2 });
     ex: "Developers and QA use it. Three jobs (orange) still have no owner.",
     short: "the tool works. What is left is people — three jobs still have no owner.",
     notes: "Read it corner by corner. Top right (manage closely) = people who decide and care: meet them often. Top left (keep satisfied) = people who can stop it but are not involved yet. Bottom right (keep informed) = the users: tell them every change. Bottom left (monitor) = not involved yet. Orange boxes are the three jobs with no owner today: IT operations must own the AI models, QA must own the test check on AI pull requests, and the platform needs a second operator." });
-  const gx = AX + 0.4, gy = AY, gw = AW - 0.4, gh = 3.66, qw = gw / 2, qh = gh / 2;
+  const gx = AX + 0.4, gy = AY, gw = AW - 0.4, gh = AH - 0.32, qw = gw / 2, qh = gh / 2;
   const quads = [
     ["Keep satisfied", "high power · low interest", "Can stop it, but not involved yet. Keep them happy.", 0, 0, C.background1, [
       ["IT operations", "Run our machines. Next: own the AI models.", true]]],
@@ -427,16 +423,16 @@ pres.addSection({ title: S2 });
       { x: x + 0.1, y: y + 0.06, w: qw - 0.2, h: 0.28, valign: "middle" });
     txt(s, meaning, { x: x + 0.1, y: y + 0.34, w: qw - 0.2, h: 0.24, fontSize: 10.5, italic: true, color: C.accent6 });
     people.forEach(([who, why, open], j) => {
-      const by = y + 0.64 + j * 0.57;
-      box(s, x + 0.12, by, qw - 0.24, 0.5, { fill: C.background1, lineColor: open ? HEX.accent4 : LINE, lw: open ? 1.5 : 0.75, name: "Group" });
+      const by = y + 0.62 + j * 0.5;
+      box(s, x + 0.12, by, qw - 0.24, 0.45, { fill: C.background1, lineColor: open ? HEX.accent4 : LINE, lw: open ? 1.5 : 0.75, name: "Group" });
       txt(s, [{ text: who, options: { bold: true, color: open ? C.accent4 : C.accent1, breakLine: true } }, { text: why }],
-        { x: x + 0.22, y: by + 0.03, w: qw - 0.44, h: 0.44, fontSize: 10.5, valign: "middle" });
+        { x: x + 0.22, y: by + 0.01, w: qw - 0.8, h: 0.43, fontSize: 10.5, valign: "middle" });
     });
   });
   txt(s, "POWER  →", { x: AX - 1.62, y: gy + gh / 2 - 0.15, w: 3.6, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "center", valign: "middle", rotate: 270, charSpacing: 1.5 });
-  txt(s, "INTEREST  →", { x: gx, y: gy + gh + 0.07, w: qw * 1.2, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "left", charSpacing: 1.5 });
-  box(s, gx + gw - 3.55, gy + gh + 0.1, 0.3, 0.22, { lineColor: HEX.accent4, lw: 1.5, name: "Legend" });
-  txt(s, "orange = a job with no owner yet", { x: gx + gw - 3.15, y: gy + gh + 0.07, w: 3.15, h: 0.3, fontSize: 11, color: C.accent4, valign: "middle" });
+  txt(s, "INTEREST  →", { x: gx, y: gy + gh + 0.03, w: qw * 1.2, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "left", charSpacing: 1.5 });
+  mark(s, gx + 0.08, gy + gh - 0.34, 1); mark(s, gx + gw - 0.34, gy + 0.08, 2); mark(s, gx + qw - 0.12 - 0.32, gy + 0.62 + 0.09, 3);
+  keyLine(s, ["up = more power, right = more interest", "the corner says how to treat that group", "orange = a job with no owner yet"]);
 }
 
 pres.addSection({ title: S3 });
@@ -448,13 +444,13 @@ pres.addSection({ title: S3 });
     ex: "A developer or QA engineer files a ticket. Seven steps later a pull request is ready.",
     short: "the senior spends minutes reading instead of hours writing.",
     notes: "The use case is 'one small change'. Simple tickets skip most of the seven steps; only real multi-file work runs them all." });
-  const c1 = 2.45, c2 = 3.55, c3 = AW - c1 - c2 - 0.7;
-  box(s, AX, AY, c1, 1.95, { name: "Actor card" });
-  person(s, AX + 0.15, AY + 0.4, 0.75);
+  const c1 = 3.0, c2 = 5.2, c3 = AW - c1 - c2 - 0.7;
+  box(s, AX, AY, c1, 1.7, { name: "Actor card" });
+  person(s, AX + 0.15, AY + 0.38, 0.75);
   txt(s, "ACTOR AND TRIGGER", { x: AX + 0.11, y: AY + 0.07, w: c1 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
-  txt(s, [{ text: "Developer or QA engineer", options: { bold: true, breakLine: true } }, { text: "files a ticket in the tracker" }], { x: AX + 1.0, y: AY + 0.4, w: c1 - 1.1, h: 0.8, fontSize: 12.5, valign: "middle" });
-  pill(s, AX + 0.15, AY + 1.4, c1 - 0.3, 0.36, "Used a few times a week", C.accent3, C.text2);
-  cell(s, AX, AY + 2.05, c1, AH - 2.05, "BEFORE IT STARTS", [
+  txt(s, [{ text: "Developer or QA engineer", options: { bold: true, breakLine: true } }, { text: "files a ticket in the tracker" }], { x: AX + 1.0, y: AY + 0.36, w: c1 - 1.1, h: 0.8, fontSize: 12.5, valign: "middle" });
+  pill(s, AX + 0.15, AY + 1.25, c1 - 0.3, 0.32, "Used a few times a week", C.accent3, C.text2);
+  cell(s, AX, AY + 1.8, c1, AH - 1.8, "BEFORE IT STARTS", [
     { text: "The ticket names a real project", options: { bullet: { indent: 12 }, breakLine: true } },
     { text: "The AI models are ready", options: { bullet: { indent: 12 }, breakLine: true } },
     { text: "The code builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12, hint: "must be true, or the run stops" });
@@ -464,16 +460,18 @@ pres.addSection({ title: S3 });
   txt(s, "MAIN FLOW", { x: fx + 0.11, y: AY + 0.07, w: c2 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   const flow = ["Someone files a ticket in plain words", "The ticket is rewritten so it is clear", "The work is split; one shared plan is written", "Each part is built in its own copy of the code", "Tests are written, then run against the build", "A second AI checks the change", "A pull request opens with an honest result"];
   flow.forEach((t, i) => {
-    const y = AY + 0.4 + i * 0.515;
-    num(s, fx + 0.12, y + 0.07, i + 1, 0.34, i === 6 ? C.accent4 : C.accent1);
-    txt(s, t, { x: fx + 0.56, y, w: c2 - 0.66, h: 0.48, fontSize: 12.5, valign: "middle" });
+    const y = AY + 0.4 + i * 0.46;
+    num(s, fx + 0.12, y + 0.05, i + 1, 0.34, i === 6 ? C.accent4 : C.accent1);
+    txt(s, t, { x: fx + 0.56, y, w: c2 - 0.66, h: 0.44, fontSize: 12.5, valign: "middle" });
   });
   arrow(s, fx + c2 + 0.03, AY + AH / 2 - 0.15, 0.3, 0.3);
   const ox = fx + c2 + 0.35;
   box(s, ox, AY, c3, AH, { fill: TINT.green, lineColor: HEX.accent5, name: "Outcome" });
   txt(s, "OUTCOME", { x: ox + 0.11, y: AY + 0.07, w: c3 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
   const outs = [["If it worked", "a pull request for a person to read and accept"], ["If it could not", "it says so in the first line — no fake success"], ["Either way", "a record of what each step did"]];
-  outs.forEach(([a, b], i) => txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: ox + 0.11, y: AY + 0.5 + i * 1.15, w: c3 - 0.2, h: 1.0, fontSize: 12.5 }));
+  outs.forEach(([a, b], i) => txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: ox + 0.11, y: AY + 0.45 + i * 1.0, w: c3 - 0.2, h: 0.95, fontSize: 12.5 }));
+  mark(s, AX + c1 - 0.34, AY + 0.06, 1); mark(s, AX + c1 - 0.34, AY + 1.86, 2); mark(s, fx + c2 - 0.34, AY + 0.06, 3); mark(s, ox + c3 - 0.34, AY + 0.06, 4);
+  keyLine(s, ["who starts it", "what must be true first", "the 7 steps AIForge runs", "what comes out"]);
 }
 
 // ---------- 10. Context View ----------
@@ -483,27 +481,29 @@ pres.addSection({ title: S3 });
     ex: "Reads a ticket, our code and memory notes. Writes a pull request, a run record, new notes.",
     short: "write the unknowns down, not just the boxes — the edges are where runs fail.",
     notes: "Walk it left to right with the example ticket 'Add a CSV export to the orders report'. The ticket comes from the tracker; AIForge reads the git repo it must change and the OKF memory notes from past runs (what worked, what failed in this repo). Out comes a pull request on our git server, a record of every agent step, and new notes for next time. The dashed line is the edge of our own machines: nothing crosses it." });
-  const iw = 2.45, cwid = 2.3, cx = AX + iw + 0.6, ox = cx + cwid + 0.6, th = 2.3;
+  const iw = 3.7, cwid = 3.0, cx = AX + iw + 0.86, ox = cx + cwid + 0.86, th = 2.15;
   txt(s, "WHAT IT READS", { x: AX, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   txt(s, "WHAT IT WRITES BACK", { x: ox, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
   const ins = [["A ticket", "e.g. “Add CSV export to the orders report”"], ["Our code", "the git repo the change goes into"], ["Memory notes", "OKF notes: what worked before"]];
   const outs = [["A pull request", "on our git server, for a person to review"], ["A run record", "every agent step, kept to read later"], ["New memory notes", "lessons saved as OKF notes"]];
   const io = (list, x, fill, line) => list.forEach(([h, d], i) => {
-    box(s, x, AY + 0.32 + i * 0.67, iw, 0.6, { fill, lineColor: line });
-    txt(s, [{ text: h, options: { bold: true, breakLine: true } }, { text: d, options: { fontSize: 10.5, color: C.text2 } }], { x: x + 0.1, y: AY + 0.32 + i * 0.67, w: iw - 0.2, h: 0.6, fontSize: 12, valign: "middle" });
+    box(s, x, AY + 0.32 + i * 0.6, iw, 0.54, { fill, lineColor: line });
+    txt(s, [{ text: h, options: { bold: true, breakLine: true } }, { text: d, options: { fontSize: 10.5, color: C.text2 } }], { x: x + 0.1, y: AY + 0.32 + i * 0.6, w: iw - 0.2, h: 0.54, fontSize: 12, valign: "middle" });
   });
   io(ins, AX, TINT.teal, LINE); io(outs, ox, TINT.green, HEX.accent5);
-  arrow(s, AX + iw + 0.1, AY + 1.0, 0.4, 0.4);
-  arrow(s, cx + cwid + 0.1, AY + 1.0, 0.4, 0.4, C.accent5);
+  arrow(s, AX + iw + 0.2, AY + 0.9, 0.45, 0.4);
+  arrow(s, cx + cwid + 0.2, AY + 0.9, 0.45, 0.4, C.accent5);
   box(s, cx - 0.08, AY, cwid + 0.16, th, { fill: C.background2, lineColor: HEX.accent4, lw: 1.75, dash: "dash", r: 0.12, name: "System boundary" });
   s.addShape(SH.RECTANGLE, { x: cx + 0.06, y: AY + 0.38, w: cwid - 0.12, h: th - 0.54, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "AIForge" });
   txt(s, "dashed line = our own machines", { x: cx - 0.1, y: AY + 0.07, w: cwid + 0.2, h: 0.26, fontSize: 10, italic: true, color: C.accent4, align: "center" });
   txt(s, [{ text: "AIForge", options: { fontSize: 19, bold: true, color: C.accent2, breakLine: true } }, { text: "7 small AI agents", options: { breakLine: true } }, { text: "plan, write, test,", options: { breakLine: true } }, { text: "check, join" }],
     { x: cx + 0.15, y: AY + 0.42, w: cwid - 0.3, h: th - 0.62, fontSize: 12.5, color: C.background1, align: "center", valign: "middle" });
-  const by = AY + th + 0.15, bh = AH - th - 0.15, bw = (AW - 0.12) / 2;
+  const by = AY + th + 0.12, bh = AH - th - 0.12, bw = (AW - 0.12) / 2;
   const bl = (a) => a.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < a.length - 1 } }));
   cell(s, AX, by, bw, bh, "WHAT WE ASSUME", bl(["The AI models are running on our machines", "They stay up for the whole run", "The ticket names a real project"]), { fs: 12, hint: "if any is false, the run fails" });
   cell(s, AX + bw + 0.12, by, bw, bh, "WHAT TO BEWARE OF", bl(["About 3–5 files per ticket is today's limit", "Some languages are too hard for small models", "Shared machines: few tickets at once"]), { fs: 12, hint: "known limits today", fill: TINT.orange, tcol: C.accent4 });
+  mark(s, AX + iw - 0.3, AY - 0.02, 1); mark(s, cx + cwid + 0.08 - 0.34, AY + 0.06, 2); mark(s, ox + iw - 0.3, AY - 0.02, 3); mark(s, AX + bw - 0.34, by + 0.06, 4);
+  keyLine(s, ["what AIForge reads", "AIForge, inside our own machines", "what it writes back", "what we assume, and known limits"]);
 }
 
 // ---------- 11. Service Blueprint ----------
@@ -513,7 +513,7 @@ pres.addSection({ title: S3 });
     ex: "A QA engineer files “Add CSV export”. They write the ticket and read the result; agents do the rest.",
     short: "the person acts twice: file the ticket, read the result. The rest is below the line.",
     notes: "Follow the example ticket across the four stages. Top three rows are what the person sees and does, and what AIForge shows them. Below the orange line is everything they never see: which agent does what, and what the platform provides. The design work is all below the line; the person's experience is just two moments." });
-  const lw = 1.55, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.6, pitch = 0.65;
+  const lw = 1.95, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.55, pitch = 0.6;
   ["1. Ask", "2. Work", "3. Check", "4. Hand back"].forEach((c, i) => {
     s.addShape(SH.RECTANGLE, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Stage" });
     txt(s, c, { x: x0 + i * cw, y: AY, w: cw - 0.07, h: 0.4, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle" });
@@ -526,13 +526,17 @@ pres.addSection({ title: S3 });
     ["Platform (unseen)", ["ticket store", "AI models on our machines", "build tools, test runners", "run record + memory notes saved"], C.accent3, C.text2],
   ];
   rows.forEach(([label, vals, fill, col], r) => {
-    const y = AY + 0.47 + r * pitch + (r > 2 ? 0.3 : 0);
-    txt(s, label, { x: AX, y, w: lw - 0.1, h: rh, fontSize: 12.5, bold: true, color: col, valign: "middle" });
+    const y = AY + 0.45 + r * pitch + (r > 2 ? 0.25 : 0);
+    txt(s, label, { x: AX + 0.36, y, w: lw - 0.44, h: rh, fontSize: 12.5, bold: true, color: col, valign: "middle" });
+    if (r === 0) mark(s, AX, y + (rh - 0.26) / 2, 2);
+    if (r === 3) mark(s, AX, y + (rh - 0.26) / 2, 4);
     vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, rh, null, v, { fill, align: "center", fs: 11.5 }));
   });
-  const ly = AY + 0.47 + 3 * pitch - 0.01;
+  const ly = AY + 0.45 + 3 * pitch - 0.08;
   seg(s, AX, ly, AX + AW, ly, HEX.accent4, 2, { dashType: "dash" });
   txt(s, "line of visibility — the person sees nothing below this line", { x: AX, y: ly + 0.04, w: AW, h: 0.22, fontSize: 11, italic: true, color: C.accent4, align: "right" });
+  mark(s, AX, AY + 0.07, 1); mark(s, AX, ly - 0.13, 3);
+  keyLine(s, ["4 stages of one ticket", "what the person sees and does", "the line: nothing below it is seen", "what AIForge does, unseen"]);
 }
 
 // ---------- 12. Business Capability Map ----------
@@ -555,16 +559,13 @@ pres.addSection({ title: S3 });
   const fill = { d: C.accent3, p: C.accent2, h: C.background1 };
   cols.forEach(([head, items], i) => {
     const x = AX + i * cw;
-    s.addShape(SH.RECTANGLE, { x, y: AY, w: cw - 0.07, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Capability group" });
-    txt(s, head, { x: x + 0.06, y: AY, w: cw - 0.19, h: 0.68, fontSize: 12.5, bold: true, color: C.background1, align: "center", valign: "middle" });
-    items.forEach(([t, k], j) => cell(s, x, AY + 0.78 + j * 0.85, cw - 0.07, 0.76, null, t, { fill: fill[k], align: "center", fs: 12, lineColor: k === "h" ? HEX.accent6 : HEX.accent3, dash: k === "h" ? "dash" : "solid" }));
+    s.addShape(SH.RECTANGLE, { x, y: AY, w: cw - 0.07, h: 0.62, fill: { color: C.text2 }, rectRadius: 0.06, objectName: "Capability group" });
+    txt(s, head, { x: x + 0.06, y: AY, w: cw - 0.5, h: 0.62, fontSize: 12.5, bold: true, color: C.background1, align: "center", valign: "middle" });
+    items.forEach(([t, k], j) => cell(s, x, AY + 0.72 + j * 0.98, cw - 0.07, 0.9, null, t, { fill: fill[k], align: "center", fs: 12, lineColor: k === "h" ? HEX.accent6 : HEX.accent3, dash: k === "h" ? "dash" : "solid" }));
   });
-  const ly = AY + 0.78 + 3 * 0.85 + 0.12;
-  [["AIForge does this today", C.accent3, "solid"], ["Partly — being built", C.accent2, "solid"], ["Still all people", C.background1, "dash"]].forEach(([t, f, d], i) => {
-    const x = AX + i * 2.83;
-    box(s, x, ly, 0.4, 0.3, { fill: f, dash: d, lineColor: d === "dash" ? HEX.accent6 : HEX.accent3, name: "Legend swatch" });
-    txt(s, t, { x: x + 0.5, y: ly, w: 2.25, h: 0.3, fontSize: 12, valign: "middle" });
-  });
+  mark(s, AX + cw - 0.07 - 0.34, AY + 0.06, 1); mark(s, AX + cw - 0.07 - 0.34, AY + 0.78, 2);
+  mark(s, AX + 2 * cw - 0.07 - 0.34, AY + 0.78, 3); mark(s, AX + 3 * cw - 0.07 - 0.34, AY + 0.72 + 2 * 0.98 + 0.06, 4);
+  keyLine(s, ["a stage of a change", "dashed = still all people", "grey = AIForge does it today", "yellow = partly, being built"]);
 }
 
 // ---------- 13. Capability Card ----------
@@ -576,15 +577,15 @@ pres.addSection({ title: S3 });
     notes: "This card is for the capability 'Build the change'. Maturity today is Good. The weakest link overall is memory: it works, but sharing it across the team is only now being built." });
   box(s, AX, AY, AW, 1.0, { name: "Capability header" });
   txt(s, [{ text: "BUILD THE CHANGE", options: { fontSize: 11, bold: true, color: C.accent1, breakLine: true } }, { text: "Turn an agreed plan into code that builds and fits the project." }],
-    { x: AX + 0.15, y: AY, w: 5.0, h: 1.0, fontSize: 13, valign: "middle" });
-  txt(s, "Growing: needs help · Good: small tickets · Strong: big tickets", { x: AX + 4.55, y: AY + 0.71, w: 3.85, h: 0.24, fontSize: 9, italic: true, color: C.accent6, align: "center" });
-  txt(s, "HOW GOOD ARE WE AT IT TODAY?", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
+    { x: AX + 0.15, y: AY, w: 7.2, h: 1.0, fontSize: 13, valign: "middle" });
+  txt(s, "Growing: needs help · Good: small tickets · Strong: big tickets", { x: AX + AW - 4.15, y: AY + 0.71, w: 4.0, h: 0.24, fontSize: 9.5, italic: true, color: C.accent6, align: "center" });
+  txt(s, "HOW GOOD ARE WE AT IT TODAY?", { x: AX + AW - 3.65, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
   ["Growing", "Good", "Strong"].forEach((t, i) => {
     const on = i === 1;
-    s.addShape(SH.RECTANGLE, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
-    txt(s, t, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fontSize: 12, bold: on, color: on ? C.background1 : C.accent6, align: "center", valign: "middle" });
+    s.addShape(SH.RECTANGLE, { x: AX + AW - 3.65 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
+    txt(s, t, { x: AX + AW - 3.65 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fontSize: 12, bold: on, color: on ? C.background1 : C.accent6, align: "center", valign: "middle" });
   });
-  const cw = (AW - 0.24) / 3, cy = AY + 1.1, ch = 2.0;
+  const cw = (AW - 0.24) / 3, cy = AY + 1.1, ch = 1.85;
   const cols = [
     ["People", "who does it", ["One person runs the platform today", "Senior developer reviews the output", "Nobody owns the AI models yet"], C.accent1],
     ["Process", "how it is done", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is accepted"], C.text2],
@@ -595,14 +596,16 @@ pres.addSection({ title: S3 });
     box(s, x, cy, cw, ch, { name: "Capability column" });
     num(s, x + 0.12, cy + 0.12, i + 1, 0.4, col);
     txt(s, [{ text: h, options: { fontSize: 15, bold: true, color: C.text2 } }, { text: "   " + hint, options: { fontSize: 11, italic: true, color: C.accent6 } }], { x: x + 0.62, y: cy + 0.12, w: cw - 0.75, h: 0.4, valign: "middle" });
-    txt(s, items.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < items.length - 1 } })), { x: x + 0.14, y: cy + 0.58, w: cw - 0.28, h: ch - 0.62, fontSize: 11.5, paraSpaceAfter: 2 });
+    txt(s, items.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < items.length - 1 } })), { x: x + 0.14, y: cy + 0.58, w: cw - 0.28, h: ch - 0.62, fontSize: 12, paraSpaceAfter: 2 });
   });
   const gy = cy + ch + 0.12, gh = AH - (gy - AY);
   box(s, AX, gy, AW, gh, { fill: TINT.orange, lineColor: HEX.accent4, name: "Gap to target" });
   txt(s, "WHAT IS MISSING (TODAY → WHAT WE WANT)", { x: AX + 0.15, y: gy + 0.07, w: 6, h: 0.26, fontSize: 11, bold: true, color: C.accent4 });
-  ["Size: 3–5 files today, 8–10 wanted", "Memory notes not yet shared across the team", "No second person trained yet"].forEach((t, i) => {
+  ["Size: 3–5 files today, 8–10 wanted", "Memory not shared team-wide yet", "No second person trained yet"].forEach((t, i) => {
     txt(s, t, { x: AX + 0.15 + i * (AW - 0.3) / 3, y: gy + 0.34, w: (AW - 0.3) / 3 - 0.15, h: gh - 0.38, fontSize: 12.5, bold: true, color: C.text1 });
   });
+  mark(s, AX + 7.4, AY + 0.1, 1); mark(s, AX + AW - 0.34, AY + 0.06, 2); mark(s, AX + cw - 0.34, cy + 0.06, 3); mark(s, AX + AW - 0.34, gy + 0.06, 4);
+  keyLine(s, ["the ability", "how good we are today", "what it needs", "what is missing"]);
 }
 
 pres.addSection({ title: S4 });
@@ -610,64 +613,71 @@ pres.addSection({ title: S4 });
 // ---------- ASR Card ----------
 {
   const s = canvasSlide({ section: S4, n: 10, stage: "How?", name: "ASR Card", q: "which few rules shape the whole design?",
-    thumb: "asr", what: "ASR = a must-have rule. Break it and the whole design fails.",
-    ex: "Three rules: do the job alone, make the files fit together, stay on our machines.",
+    thumb: "asr", what: "ASR = a must-have rule. Break it and the whole design stops being worth it.",
+    ex: "Three rules: finish the job alone, make changed files fit together, stay on our own machines.",
     short: "three rules hold up the whole design. Break any one and the tool is not worth using.",
-    notes: "ASR stands for architecturally significant requirement. Each card states the rule, how critical it is, what it risks or costs, and the proof that it holds. Picture them as three pillars: take one away and the roof falls. These cards drive the decision record and the QATT card that follow." });
-  s.addShape(SH.ISOSCELES_TRIANGLE, { x: AX, y: AY, w: AW, h: 0.42, fill: { color: C.text2 }, objectName: "Roof" });
-  s.addShape(SH.RECTANGLE, { x: AX, y: AY + 0.42, w: AW, h: 0.4, fill: { color: C.text2 }, objectName: "Beam" });
-  txt(s, "THE WHOLE AIFORGE DESIGN RESTS ON THREE RULES", { x: AX, y: AY + 0.42, w: AW, h: 0.4, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle", charSpacing: 1.5 });
-  const cw = 2.5, sp = (AW - 3 * cw) / 4, py = AY + 0.82, ph = AH - 0.82 - 0.14;
-  s.addShape(SH.RECTANGLE, { x: AX, y: AY + AH - 0.14, w: AW, h: 0.14, fill: { color: C.accent6 }, objectName: "Ground" });
+    notes: "ASR stands for architecturally significant requirement: a rule so important that it shapes the design. Each pillar says the rule, how important it is, what goes wrong if we break it (or, for rule 3, the price we pay to keep it), and the proof that it holds today. Take one pillar away and the roof falls. These rules drive the decision record and the QATT card that follow." });
+  s.addShape(SH.ISOSCELES_TRIANGLE, { x: AX, y: AY, w: AW, h: 0.4, fill: { color: C.text2 }, objectName: "Roof" });
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY + 0.4, w: AW, h: 0.38, fill: { color: C.text2 }, objectName: "Beam" });
+  txt(s, "THE WHOLE AIFORGE DESIGN RESTS ON THREE RULES", { x: AX, y: AY + 0.4, w: AW, h: 0.38, fontSize: 12, bold: true, color: C.background1, align: "center", valign: "middle", charSpacing: 1.5 });
+  const sp = 0.45, cw = (AW - 4 * sp) / 3, py = AY + 0.78, ph = AH - 0.78 - 0.12;
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY + AH - 0.12, w: AW, h: 0.12, fill: { color: C.accent6 }, objectName: "Ground" });
   const asr = [
-    ["Do the job on its own", "Ticket in, pull request out. Nobody in the middle.", "RISK", "Bad automatic changes destroy trust fast.", "First full run: ticket to pull request with no help.", "HIGH"],
-    ["Make the files fit together", "Change five files and they still build as one.", "RISK", "Big tickets look done but do not build.", "Code across files builds: 0 lines before, 53 after.", "HIGH"],
-    ["Stay on our machines", "Machines we own. No cloud. Works offline.", "COST", "Our own models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
+    ["Finish the job alone", "Ticket in, pull request out. Nobody has to step in half-way.", "IF WE BREAK IT", "Someone must watch every run; no time saved.", "First full run: ticket to pull request, no help.", "HIGH"],
+    ["Changed files fit together", "A change across five files must still build as one piece.", "IF WE BREAK IT", "Big tickets look done, but the code does not build.", "Cross-file code builds: 0 lines before, 53 after.", "HIGH"],
+    ["Stay on our own machines", "No cloud. Code and data never leave. Works offline.", "THE PRICE WE PAY", "Our own models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
   ];
+  let first;
   asr.forEach(([h, b, rl, rk, p, lvl], i) => {
     const x = AX + sp + i * (cw + sp), hi = lvl === "HIGH";
     box(s, x, py, cw, ph, { r: 0.02, name: "Pillar" });
-    num(s, x + 0.12, py + 0.1, i + 1, 0.4);
-    s.addShape(SH.RECTANGLE, { x: x + cw - 1.97, y: py + 0.14, w: 1.85, h: 0.32, fill: { color: hi ? C.accent4 : C.accent2 }, objectName: "Importance" });
-    txt(s, "IMPORTANCE: " + lvl.replace("MEDIUM", "MED"), { x: x + cw - 1.97, y: py + 0.14, w: 1.85, h: 0.32, fontSize: 9.5, bold: true, align: "center", valign: "middle", color: hi ? C.background1 : C.text1 });
-    txt(s, h, { x: x + 0.12, y: py + 0.56, w: cw - 0.24, h: 0.52, fontSize: 14.5, bold: true, color: C.text2, valign: "middle" });
-    txt(s, b, { x: x + 0.12, y: py + 1.1, w: cw - 0.24, h: 0.5, fontSize: 12 });
-    txt(s, [{ text: (rl === "RISK" ? "IF IT BREAKS:" : "THE PRICE:") + "  ", options: { bold: true, color: C.accent4, fontSize: 10.5 } }, { text: rk }], { x: x + 0.12, y: py + 1.62, w: cw - 0.24, h: 0.5, fontSize: 12 });
-    box(s, x + 0.1, py + 2.2, cw - 0.2, ph - 2.3, { fill: TINT.green, lineColor: TINT.green, name: "Proof" });
-    txt(s, [{ text: "PROOF IT HOLDS:  ", options: { bold: true, color: C.accent5, fontSize: 10.5 } }, { text: p }], { x: x + 0.18, y: py + 2.2, w: cw - 0.36, h: ph - 2.3, fontSize: 11, valign: "middle" });
+    num(s, x + 0.1, py + 0.08, i + 1, 0.4);
+    s.addShape(SH.RECTANGLE, { x: x + cw - 2.02, y: py + 0.12, w: 1.9, h: 0.3, fill: { color: hi ? C.accent4 : C.accent2 }, objectName: "Importance" });
+    txt(s, "IMPORTANCE: " + lvl.replace("MEDIUM", "MED"), { x: x + cw - 2.02, y: py + 0.12, w: 1.9, h: 0.3, fontSize: 10, bold: true, align: "center", valign: "middle", color: hi ? C.background1 : C.text1 });
+    txt(s, h, { x: x + 0.14, y: py + 0.52, w: cw - 0.28, h: 0.36, fontSize: 15, bold: true, color: C.text2, valign: "middle" });
+    txt(s, b, { x: x + 0.14, y: py + 0.9, w: cw - 0.28, h: 0.44, fontSize: 12 });
+    txt(s, [{ text: rl + ":  ", options: { bold: true, color: C.accent4, fontSize: 10.5 } }, { text: rk }], { x: x + 0.14, y: py + 1.36, w: cw - 0.28, h: 0.44, fontSize: 12 });
+    box(s, x + 0.1, py + 1.86, cw - 0.2, ph - 1.96, { fill: TINT.green, lineColor: TINT.green, name: "Proof" });
+    txt(s, [{ text: "PROOF IT HOLDS:  ", options: { bold: true, color: C.accent5, fontSize: 10.5 } }, { text: p }], { x: x + 0.2, y: py + 1.86, w: cw - 0.4, h: ph - 1.96, fontSize: 12, valign: "middle" });
+    if (i === 0) first = x;
   });
+  const mx = first + cw + (sp - 0.26) / 2;
+  mark(s, mx, py + 0.57, 1); mark(s, mx, py + 0.14, 2); mark(s, mx, py + 1.45, 3); mark(s, mx, py + 2.05, 4);
+  keyLine(s, ["one must-have rule", "how important it is", "what goes wrong without it", "the proof it holds today"]);
 }
 
 // ---------- 15. QATT Card ----------
 {
   const s = canvasSlide({ section: S4, n: 11, stage: "How?", name: "QATT Card", q: "how do we turn “it must be good” into a number?",
-    thumb: "qatt", what: "A quality goal written as a test, with a number.",
-    ex: "A five-file ticket must come out as one change that builds: 0 lines before, 53 after.",
+    thumb: "qatt", what: "A quality goal written as a test: one sentence, and a number we can check.",
+    ex: "Five-file ticket in, one change that builds out. One big model: 0 lines. Small agents: 53.",
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
-    notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
-  txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
-  const parts = [["WHO", "A developer or QA engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal day, on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "cross-file lines that build: 0 → 53"]];
+    notes: "QATT = quality attribute scenario. The six boxes are the six standard IASA parts — source, stimulus, environment, artifact, response, response measure — but read them as one sentence: when a developer files a five-file ticket on a normal day, AIForge must hand back one change that builds. The number: lines of code that call code in another file and still build. One big model wrote 0 such lines; the line of small agents with one shared plan wrote 53. The three cards below are more quality goals in short form, each with where we are today." });
+  txt(s, [{ text: "THE GOAL IN ONE SENTENCE:  ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "when a developer files a five-file ticket, AIForge must hand back one change that builds.", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW - 0.4, h: 0.36, fontSize: 14, valign: "middle" });
+  const parts = [["WHO", "A developer or QA engineer"], ["DOES WHAT", "files a ticket that changes five files"], ["WHEN, WHERE", "a normal day, on our own machines"], ["TO WHAT", "the AIForge agents"], ["MUST GET", "one change that builds and can be merged"], ["WE MEASURE", "lines across files that build: 0 → 53"]];
   const pw = AW / 6;
   parts.forEach(([t, b], i) => {
     const last = i === 5;
-    s.addShape(i === 0 ? SH.PENTAGON : SH.CHEVRON, { x: AX + i * pw, y: AY + 0.42, w: pw + (last ? 0 : 0.12), h: 0.38, fill: { color: last ? C.accent4 : (i % 2 ? C.accent1 : C.text2) }, objectName: "Scenario part" });
-    txt(s, t, { x: AX + i * pw + 0.16, y: AY + 0.42, w: pw - 0.2, h: 0.38, fontSize: 10, bold: true, color: C.background1, align: "center", valign: "middle" });
-    cell(s, AX + i * pw + 0.02, AY + 0.86, pw - 0.07, 1.02, null, b, { fs: 12, align: "center", fill: last ? C.accent2 : C.background1, lineColor: last ? HEX.accent4 : HEX.accent3, bold: last });
+    s.addShape(i === 0 ? SH.PENTAGON : SH.CHEVRON, { x: AX + i * pw, y: AY + 0.44, w: pw + (last ? 0 : 0.12), h: 0.36, fill: { color: last ? C.accent4 : (i % 2 ? C.accent1 : C.text2) }, objectName: "Scenario part" });
+    txt(s, t, { x: AX + i * pw + 0.16, y: AY + 0.44, w: pw - 0.2, h: 0.36, fontSize: 10, bold: true, color: C.background1, align: "center", valign: "middle" });
+    cell(s, AX + i * pw + 0.02, AY + 0.86, pw - 0.07, 0.9, null, b, { fs: 12.5, align: "center", fill: last ? C.accent2 : C.background1, lineColor: last ? HEX.accent4 : HEX.accent3, bold: last });
   });
-  txt(s, "MORE SCENARIOS  —  the same idea, written short", { x: AX, y: AY + 2.02, w: AW, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
+  txt(s, "MORE QUALITY GOALS, IN SHORT", { x: AX, y: AY + 1.9, w: 6, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   const more = [
-    ["Nothing leaves our network", "A check fails the build if it would call out", "Today: working, small batch", C.accent5],
-    ["We know the size limit", "Count files one ticket handles cleanly", "Today: 3–5 files", C.accent4],
+    ["Nothing leaves our network", "A check fails the build if code would call outside", "Today: working, small batch", C.accent5],
+    ["We know the size limit", "Count the files one ticket handles cleanly", "Today: 3–5 files", C.accent4],
     ["Memory notes stay few and clean", "Count duplicate notes each week", "Today: merge built, not live", C.accent6],
   ];
-  const cw = (AW - 0.24) / 3, my = AY + 2.32, mh = AH - 2.32;
+  const cw = (AW - 0.24) / 3, my = AY + 2.2, mh = AH - 2.2;
   more.forEach(([h, chk, st, col], i) => {
     const x = AX + i * (cw + 0.12);
     box(s, x, my, cw, mh, { name: "Scenario card" });
-    txt(s, h, { x: x + 0.14, y: my + 0.08, w: cw - 0.28, h: 0.5, fontSize: 13, bold: true, color: C.text2, valign: "middle" });
-    txt(s, [{ text: "How we check:  ", options: { bold: true, color: C.accent1 } }, { text: chk }], { x: x + 0.14, y: my + 0.64, w: cw - 0.28, h: 0.56, fontSize: 12.5 });
-    pill(s, x + 0.14, my + mh - 0.44, cw - 0.28, 0.34, st, col, C.background1);
+    txt(s, h, { x: x + 0.14, y: my + 0.08, w: cw - 0.5, h: 0.32, fontSize: 13.5, bold: true, color: C.text2, valign: "middle" });
+    txt(s, [{ text: "How we check:  ", options: { bold: true, color: C.accent1 } }, { text: chk }], { x: x + 0.14, y: my + 0.46, w: cw - 0.28, h: 0.46, fontSize: 12.5 });
+    pill(s, x + 0.14, my + mh - 0.42, cw - 0.28, 0.32, st, col, C.background1);
   });
+  mark(s, AX + AW - 0.3, AY + 0.05, 1); mark(s, AX + AW - 0.3, AY + 1.8, 2); mark(s, AX + cw - 0.34, my + 0.1, 3);
+  keyLine(s, ["the goal; the six boxes split it up", "the number we check", "more goals; the bar = where we are today"]);
 }
 
 // ---------- 16. Decision Record (ADR) ----------
@@ -677,13 +687,13 @@ pres.addSection({ title: S4 });
     ex: "How agents remember past work: short OKF notes, not plain RAG, a graph DB, or nothing.",
     short: "small models need less to read, not more. A few short notes beat a big pile of search results.",
     notes: "OKF = Open Knowledge Format (v0.1): a folder of Markdown files, one fact per file, a 'type' at the top (learning, solution, task...), and links between files. AIForge finds the right notes with a small keyword + meaning search (SQLite) and gives each agent only those few. Classic RAG chops all code and documents into pieces and pastes the closest pieces into the prompt: on small local models that floods the 3–5-file window with half-related text. We also tried a graph database (Neo4j) and dropped it: heavy to run and to keep in step with the code. The decision log also holds the earlier choice of many small agents — same reason: keep what each model reads small." });
-  cell(s, AX, AY, AW, 0.86, "THE PROBLEM WE HAD", "Agents must remember what worked before: team rules, past fixes, known traps. But our small AI models can only read a little at once — give them too much and they lose the point.", { fs: 12 });
-  const ow = (AW - 0.36) / 4, oy = AY + 0.94, oh = 1.42;
+  cell(s, AX, AY, AW, 0.84, "THE PROBLEM WE HAD", "Agents must remember what worked before: team rules, past fixes, known traps. But our small AI models can only read a little at once — give them too much and they lose the point.", { fs: 12 });
+  const ow = (AW - 0.36) / 4, oy = AY + 0.92, oh = 1.4;
   const opts = [
     ["Plain RAG", "Pastes many pieces of code and docs in. Too noisy for small models.", false],
     ["Graph database", "Tried Neo4j. Heavy to run and to keep in step with code.", false],
     ["No memory", "Every run starts from zero and repeats old mistakes.", false],
-    ["OKF notes", "Short Markdown notes, one fact each. Only the few that match are read.", true]];
+    ["OKF notes", "Short Markdown notes, one fact each. Only matching notes are read.", true]];
   opts.forEach(([h, b, pick], i) => {
     const x = AX + i * (ow + 0.12);
     box(s, x, oy, ow, oh, { fill: pick ? C.accent1 : C.background1, lineColor: pick ? HEX.accent1 : HEX.accent3, name: "Option" });
@@ -691,7 +701,7 @@ pres.addSection({ title: S4 });
     txt(s, h, { x: x + 0.12, y: oy + 0.42, w: ow - 0.24, h: 0.3, fontSize: 13.5, bold: true, color: pick ? C.background1 : C.text2 });
     txt(s, b, { x: x + 0.12, y: oy + 0.73, w: ow - 0.24, h: 0.66, fontSize: 11, color: pick ? C.background1 : C.text1 });
   });
-  const dy = oy + oh + 0.08, dh = AH - (dy - AY), w1 = 3.05, w2 = 3.05, w3 = AW - w1 - w2 - 0.24;
+  const dy = oy + oh + 0.08, dh = AH - (dy - AY), w1 = 4.5, w2 = 4.5, w3 = AW - w1 - w2 - 0.24;
   cell(s, AX, dy, w1, dh, "OUR DECISION — WE WILL…", "keep memory as short OKF notes, find them with a small keyword + meaning search, and give each agent only the few it needs.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 11.5, bold: true });
   cell(s, AX + w1 + 0.12, dy, w2, dh, "WHAT IT MEANS FOR US", [
     { text: "+ ", options: { bold: true, color: C.accent5 } }, { text: "anyone can open, read and fix a note; small models stay focused", options: { breakLine: true } },
@@ -703,7 +713,9 @@ pres.addSection({ title: S4 });
   s.addShape(SH.OVAL, { x: rx + 0.42, y: dy + 0.39, w: 0.22, h: 0.22, fill: { color: C.accent5 }, objectName: "Reversibility marker" });
   txt(s, "easy to undo", { x: rx + 0.11, y: dy + 0.62, w: w3 / 2, h: 0.22, fontSize: 10, color: C.accent6 });
   txt(s, "permanent", { x: rx + w3 / 2, y: dy + 0.62, w: w3 / 2 - 0.11, h: 0.22, fontSize: 10, color: C.accent6, align: "right" });
-  txt(s, [{ text: "Plain files: easy to move to another store.", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.86, w: w3 - 0.22, h: dh - 0.9, fontSize: 10.5 });
+  txt(s, [{ text: "Plain files: easy to move.", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.76, w: w3 - 0.22, h: dh - 0.8, fontSize: 10 });
+  mark(s, AX + AW - 0.34, AY + 0.06, 1); mark(s, AX + ow - 0.34, oy + 0.1, 2); mark(s, AX + w1 - 0.34, dy + 0.06, 3); mark(s, rx + w3 - 0.34, dy + 0.06, 4);
+  keyLine(s, ["the problem", "the options we looked at; one chosen", "the decision and what it means", "can we undo it?"]);
 }
 
 pres.addSection({ title: S5 });
@@ -715,10 +727,10 @@ pres.addSection({ title: S5 });
     ex: "Goal: small tickets go through AIForge. Key number, accepted pull requests, is not counted yet.",
     short: "the tool works; now we must measure how often it succeeds. The first row is the problem.",
     notes: "Without the first number there is no case to make this standard practice. Bars show how far today is from target; the dashed bar means we do not measure it yet." });
-  s.addShape(SH.RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
-  txt(s, [{ text: "GOAL   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.4, h: 0.68, fontSize: 16, valign: "middle" });
-  const kx = AX, kw = 4.3, bx = AX + 4.4, bw = 1.75, tx = bx + bw + 0.15, tw = 1.15, gx2 = tx + tw + 0.05, gw = AX + AW - gx2;
-  const hy = AY + 0.76;
+  s.addShape(SH.RECTANGLE, { x: AX, y: AY, w: AW, h: 0.6, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
+  txt(s, [{ text: "GOAL   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.7, h: 0.6, fontSize: 16, valign: "middle" });
+  const kx = AX, kw = 5.6, bx = AX + 5.75, bw = 3.2, tx = bx + bw + 0.15, tw = 1.15, gx2 = tx + tw + 0.05, gw = AX + AW - gx2;
+  const hy = AY + 0.68;
   [["WHAT WE COUNT, AND WHY", kx, kw, "left"], ["HOW CLOSE WE ARE", bx, bw, "left"], ["TODAY", tx, tw, "center"], ["TARGET", gx2, gw, "center"]].forEach(([t, x, w, a]) => txt(s, t, { x, y: hy, w, h: 0.24, fontSize: 10, bold: true, color: C.accent6, align: a }));
   const krs = [
     ["Accepted pull requests", "of the tickets it takes, how many a person accepts", null, "Not counted", "3 in 4", C.accent4],
@@ -738,6 +750,8 @@ pres.addSection({ title: S5 });
     txt(s, now, { x: tx, y, w: tw, h, fontSize: 12.5, bold: true, color: col, align: "center", valign: "middle" });
     txt(s, tgt, { x: gx2, y, w: gw - 0.1, h, fontSize: 12.5, bold: true, color: C.text2, align: "center", valign: "middle" });
   });
+  mark(s, AX + AW - 0.4, AY + 0.17, 1); mark(s, kx + kw - 0.4, hy - 0.02, 2); mark(s, bx + bw - 0.3, hy - 0.02, 3); mark(s, AX + AW - 0.3, hy - 0.02, 4);
+  keyLine(s, ["the goal", "what we count, and why it matters", "how close we are", "today against the target"]);
 }
 
 // ---------- 18. Roadmap Canvas ----------
@@ -747,7 +761,7 @@ pres.addSection({ title: S5 });
     ex: "From an honest result on every pull request now, to open for every team by year end.",
     short: "one rule for the whole year: nothing on this plan moves work off our own machines.",
     notes: "Read each row left to right. The people row is the one most likely to slip, and it is the one the power/interest grid said matters most." });
-  const lw = 1.3, cw = (AW - lw) / 4, x0 = AX + lw;
+  const lw = 1.6, cw = (AW - lw) / 4, x0 = AX + lw;
   ["Q1", "Q2", "Q3", "Q4"].forEach((q, i) => {
     s.addShape(i === 0 ? SH.PENTAGON : SH.CHEVRON, { x: x0 + i * cw, y: AY, w: cw + (i < 3 ? 0.1 : -0.03), h: 0.5, fill: { color: i % 2 ? C.accent1 : C.text2 }, objectName: "Quarter" });
     txt(s, q, { x: x0 + i * cw, y: AY, w: cw, h: 0.5, fontSize: 15, bold: true, color: C.background1, align: "center", valign: "middle" });
@@ -764,6 +778,8 @@ pres.addSection({ title: S5 });
     txt(s, [{ text: label, options: { fontSize: 15, bold: true, breakLine: true } }, { text: hint, options: { fontSize: 10 } }], { x: AX + 0.04, y, w: lw - 0.18, h, color: C.background1, align: "center", valign: "middle" });
     vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, h, null, v, { fill, lineColor: fill, align: "center", fs: 13 }));
   });
+  mark(s, AX + 0.6, AY + 0.12, 1); mark(s, AX + 0.04, ry + 0.04, 2); mark(s, x0 + 2 * cw - 0.07 - 0.34, ry + 0.06, 3);
+  keyLine(s, ["the quarters, left to right", "the rows: product, platform, people", "one step planned for that quarter"]);
 }
 
 // =====================================================================
