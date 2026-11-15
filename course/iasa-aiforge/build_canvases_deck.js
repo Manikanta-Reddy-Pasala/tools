@@ -383,34 +383,40 @@ pres.addSection({ title: S2 });
 // ---------- 8. Power / Interest Grid ----------
 {
   const s = canvasSlide({ section: S2, n: 4, stage: "Who?", name: "Power / Interest Grid", q: "who must we win over, and who must own it?",
-    thumb: "grid", what: "A two-by-two: each group placed by its power and its interest.",
-    ex: "Devs and QA are the users. IT must move from watching to owning; QA must own the test check.",
+    thumb: "grid", what: "Up = power: can they stop or approve it? Right = interest: how much does it touch their work?",
+    ex: "Developers and QA use it. Three jobs (orange) still have no owner.",
     short: "the tool works. What is left is people — three jobs still have no owner.",
-    notes: "Positions are our reading of where each group stands today; the arrows are the moves the roadmap needs. IT operations must go from watching to owning the model service; QA must own the test gate on AI pull requests; the platform needs a second operator." });
-  const gx = AX + 0.45, gy = AY, gw = 5.3, gh = 3.6, qw = gw / 2, qh = gh / 2;
-  const quad = [["Keep satisfied", 0, 0, C.background1], ["Manage closely", 1, 0, TINT.teal], ["Monitor", 0, 1, C.background1], ["Keep informed", 1, 1, C.background1]];
-  quad.forEach(([t, cx, cy, fill]) => {
-    s.addShape(SH.RECTANGLE, { x: gx + cx * qw, y: gy + cy * qh, w: qw, h: qh, fill: { color: fill }, line: { color: HEX.accent3, width: 1 }, objectName: "Quadrant" });
-    txt(s, t, { x: gx + cx * qw + 0.1, y: gy + cy * qh + (cy ? qh - 0.32 : 0.06), w: qw - 0.2, h: 0.26, fontSize: 11, italic: true, color: C.accent6, align: cx ? "right" : "left" });
+    notes: "Read it corner by corner. Top right (manage closely) = people who decide and care: meet them often. Top left (keep satisfied) = people who can stop it but are not involved yet. Bottom right (keep informed) = the users: tell them every change. Bottom left (monitor) = not involved yet. Orange boxes are the three jobs with no owner today: IT operations must own the AI models, QA must own the test check on AI pull requests, and the platform needs a second operator." });
+  const gx = AX + 0.4, gy = AY, gw = AW - 0.4, gh = 3.66, qw = gw / 2, qh = gh / 2;
+  const quads = [
+    ["Keep satisfied", "high power · low interest", "Can stop it, but not involved yet. Keep them happy.", 0, 0, C.background1, [
+      ["IT operations", "Run our machines. Next: own the AI models.", true]]],
+    ["Manage closely", "high power · high interest", "Decide and care. Meet them often.", 1, 0, TINT.teal, [
+      ["Engineering lead", "Decides if teams use AIForge.", false],
+      ["Platform operator", "The one person who runs it. Next: a second person.", true]]],
+    ["Monitor", "low power · low interest", "Not involved yet. Check in now and then.", 0, 1, C.background1, [
+      ["Junior developers", "Few use it yet. Goal: start using it in Q3.", false]]],
+    ["Keep informed", "low power · high interest", "The daily users. Tell them every change.", 1, 1, C.background1, [
+      ["Senior developers", "Main users. Hand it their routine tickets.", false],
+      ["QA engineers", "Use it for test automation. Next: own the test check.", true]]],
+  ];
+  quads.forEach(([title, tag, meaning, cx, cy, fill, people]) => {
+    const x = gx + cx * qw, y = gy + cy * qh;
+    s.addShape(SH.RECTANGLE, { x, y, w: qw, h: qh, fill: { color: fill }, line: { color: LINE, width: 1 }, objectName: "Quadrant" });
+    txt(s, [{ text: title, options: { bold: true, color: C.text2, fontSize: 13 } }, { text: "   " + tag, options: { color: C.accent6, fontSize: 10 } }],
+      { x: x + 0.1, y: y + 0.06, w: qw - 0.2, h: 0.28, valign: "middle" });
+    txt(s, meaning, { x: x + 0.1, y: y + 0.34, w: qw - 0.2, h: 0.24, fontSize: 10.5, italic: true, color: C.accent6 });
+    people.forEach(([who, why, open], j) => {
+      const by = y + 0.64 + j * 0.57;
+      box(s, x + 0.12, by, qw - 0.24, 0.5, { fill: C.background1, lineColor: open ? HEX.accent4 : LINE, lw: open ? 1.5 : 0.75, name: "Group" });
+      txt(s, [{ text: who, options: { bold: true, color: open ? C.accent4 : C.accent1, breakLine: true } }, { text: why }],
+        { x: x + 0.22, y: by + 0.03, w: qw - 0.44, h: 0.44, fontSize: 10.5, valign: "middle" });
+    });
   });
-  txt(s, "POWER  →", { x: AX - 1.55, y: gy + gh / 2 - 0.15, w: 3.6, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "center", valign: "middle", rotate: 270, charSpacing: 1.5 });
-  txt(s, "INTEREST  →", { x: gx, y: gy + gh + 0.08, w: gw, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "center", charSpacing: 1.5 });
-  const chip = (t, x, y, w, fill, col) => pill(s, gx + x, gy + y, w, 0.4, t, fill, col);
-  chip("IT operations", 0.3, 0.42, 1.5, C.accent4, C.background1);
-  seg(s, gx + 1.85, gy + 0.62, gx + 3.15, gy + 0.62, HEX.accent4, 2, { dashType: "dash", endArrowType: "triangle" });
-  chip("Engineering lead", 3.3, 0.42, 1.75, C.text2, C.background1);
-  chip("Platform operator", 3.3, 1.2, 1.75, C.text2, C.background1);
-  chip("Senior developers", 2.78, 2.25, 1.75, C.accent1, C.background1);
-  chip("QA engineers", 3.45, 2.88, 1.6, C.accent4, C.background1);
-  seg(s, gx + 4.85, gy + 2.83, gx + 4.85, gy + 1.92, HEX.accent4, 2, { dashType: "dash", endArrowType: "triangle" });
-  chip("Junior developers", 0.55, 2.55, 1.75, C.accent1, C.background1);
-  const lx = gx + gw + 0.25, lwid = AX + AW - lx;
-  box(s, lx, AY, lwid, AH, { fill: C.accent2, lineColor: LINE, name: "Moves card" });
-  txt(s, "The moves we need", { x: lx + 0.15, y: AY + 0.15, w: lwid - 0.3, h: 0.35, fontSize: 15, bold: true, color: C.text2 });
-  const moves = [["IT operations", "watching → owning the AI models"], ["QA engineers", "users → owning the test check"], ["Platform operator", "one person → two"]];
-  moves.forEach(([a, b], i) => {
-    txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: lx + 0.15, y: AY + 0.65 + i * 1.08, w: lwid - 0.3, h: 1.0, fontSize: 13 });
-  });
+  txt(s, "POWER  →", { x: AX - 1.62, y: gy + gh / 2 - 0.15, w: 3.6, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "center", valign: "middle", rotate: 270, charSpacing: 1.5 });
+  txt(s, "INTEREST  →", { x: gx, y: gy + gh + 0.07, w: qw * 1.2, h: 0.3, fontSize: 11, bold: true, color: C.text2, align: "left", charSpacing: 1.5 });
+  box(s, gx + gw - 3.55, gy + gh + 0.1, 0.3, 0.22, { lineColor: HEX.accent4, lw: 1.5, name: "Legend" });
+  txt(s, "orange = a job with no owner yet", { x: gx + gw - 3.15, y: gy + gh + 0.07, w: 3.15, h: 0.3, fontSize: 11, color: C.accent4, valign: "middle" });
 }
 
 pres.addSection({ title: S3 });
