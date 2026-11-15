@@ -143,8 +143,10 @@ function keyLine(s, labels) {
     x += 0.33 + w + 0.3;
   });
 }
+const FULL = { "ASR Card": "Architecturally Significant Requirement", "QATT Card": "Quality Attribute Scenario", "ADR Card": "Architecture Decision Record", "OKR Card": "Objectives and Key Results" };
 function canvasSlide(o) {
-  const s = content(o.section, o.name, o.what);
+  const title = FULL[o.name] ? [{ text: o.name }, { text: `  (${FULL[o.name]})`, options: { fontSize: 20, bold: false, color: C.accent6 } }] : o.name;
+  const s = content(o.section, title, o.what);
   sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
   txt(s, [{ text: "In AIForge:  ", options: { bold: true, color: C.accent1 } }, { text: o.ex }], { x: 0.6, y: 6.2, w: 12.13, h: 0.6, fontSize: 16, valign: "middle" });
   s.addNotes(`It answers: ${o.q}\nIn short: ${o.short}\n\n${o.notes}`);
@@ -211,14 +213,15 @@ const STAGES = [
   ["Why?", "the business", [["Business Model Canvas", "How it gives value, to whom, at what cost"]]],
   ["Who?", "the people", [["Persona Card", "One kind of user: their day, wants, blocks"], ["Customer Journey Map", "Each step the user takes, and how it feels"], ["Power / Interest Grid", "Who has a say, who cares, who must own it"]]],
   ["What?", "the service", [["Use Case Card", "One job: who starts it, the steps, the result"], ["Context View", "What is inside, and what it talks to"], ["Service Blueprint", "What the user sees, and what runs behind"], ["Capability Map", "Everything the business must be good at"], ["Capability Card", "One ability: people, process, tools"]]],
-  ["How?", "the design", [["ASR Card", "The few must-have rules that shape the design"], ["QATT Card", "A quality goal written as a number to test"], ["Decision Record (ADR)", "What we chose, what else we looked at, why"]]],
-  ["Where next?", "the plan", [["OKR Card", "The goal, and the numbers that prove it"], ["Roadmap Canvas", "What happens when: product, platform, people"]]],
+  ["How?", "the design", [["ASR Card", "Architecturally Significant Requirement"], ["QATT Card", "Quality Attribute Scenario: a quality goal as a number"], ["ADR Card", "Architecture Decision Record: our choice"]]],
+  ["Where next?", "the plan", [["OKR Card", "Objectives and Key Results: the goal and its numbers"], ["Roadmap Canvas", "What happens when: product, platform, people"]]],
 ];
 {
   const s = content(S1, "The canvases at a glance", `${TOTAL} canvases, grouped by the question each one answers`);
   sticky(s, "The map", "Five questions");
   let n = 0;
   const w = 2.3, gap = 0.1575;
+  const CORE = ["Persona Card", "Customer Journey Map", "ASR Card", "ADR Card", "QATT Card", "OKR Card"];
   STAGES.forEach(([q, cap, list], i) => {
     const x = 0.6 + i * (w + gap);
     s.addShape(SH.PENTAGON, { x, y: 1.8, w, h: 0.7, fill: { color: i % 2 ? C.accent1 : C.text2 }, objectName: "Stage" });
@@ -227,14 +230,20 @@ const STAGES = [
     list.forEach(([name, hint], j) => {
       n += 1;
       const y = 2.62 + j * 0.71;
-      box(s, x, y, w, 0.65, { name: "Canvas chip" });
+      const core = CORE.includes(name);
+      box(s, x, y, w, 0.65, { name: core ? "Core canvas chip" : "Canvas chip", fill: core ? TINT.teal : C.background1, lineColor: core ? HEX.accent1 : LINE, lw: core ? 2 : 0.75 });
       num(s, x + 0.04, y + 0.05, n, 0.3);
       txt(s, [{ text: name, options: { fontSize: 11.5, bold: true, color: C.text2, breakLine: true } }, { text: hint, options: { fontSize: 10, color: C.text1 } }],
         { x: x + 0.38, y: y + 0.05, w: w - 0.45, h: 0.57, valign: "top" });
     });
   });
+  box(s, 0.6, 3.5, 2.3, 1.6, { fill: C.background1, lineColor: HEX.accent1, lw: 1, name: "Core legend" });
+  box(s, 0.75, 3.65, 0.4, 0.26, { fill: TINT.teal, lineColor: HEX.accent1, lw: 2, name: "Legend swatch" });
+  txt(s, "= core canvas", { x: 1.25, y: 3.63, w: 1.6, h: 0.3, fontSize: 12, bold: true, color: C.accent1, valign: "middle" });
+  txt(s, [{ text: "Start with these 6.", options: { bold: true, breakLine: true } }, { text: "They carry the whole argument, from the person's pain to the goal. The other 8 add detail." }],
+    { x: 0.75, y: 4.05, w: 2.0, h: 1.45, fontSize: 11.5 });
   inShort(s, "start with why and who. The design canvases only make sense after those.");
-  s.addNotes("The numbers on the chips are the order we walk through them. Every canvas slide has the same shape: on the left what the canvas is and how it helps, on the right the canvas itself filled in for AIForge.");
+  s.addNotes("The numbers on the chips are the order we walk through them. The six blue canvases are the core: Persona (who hurts) -> Customer Journey (where the pain is) -> ASR (the must-have rules) -> ADR (the decision those rules force) -> QATT (the number that proves it) -> OKR (the goal we track). If time is short, fill only these six. Every canvas slide has the same shape: the canvas across the slide, small numbers on its parts, a key line under it, and the AIForge example at the bottom.");
 }
 
 // ---------- 4. Our example ----------
@@ -682,7 +691,7 @@ pres.addSection({ title: S4 });
 
 // ---------- 16. Decision Record (ADR) ----------
 {
-  const s = canvasSlide({ section: S4, n: 12, stage: "How?", name: "Decision Record (ADR)", q: "what did we decide, what else did we consider, and why?",
+  const s = canvasSlide({ section: S4, n: 12, stage: "How?", name: "ADR Card", q: "what did we decide, what else did we consider, and why?",
     thumb: "adr", what: "A short note of one choice: what we picked, what we dropped, and why.",
     ex: "How agents remember past work: short OKF notes, not plain RAG, a graph DB, or nothing.",
     short: "small models need less to read, not more. A few short notes beat a big pile of search results.",
@@ -795,7 +804,7 @@ pres.addSection({ title: S6 });
     ["Persona Card", "“I know how to do this. I do not have the hours.”"],
     ["Customer Journey", "The wait is the cost, not the typing."],
     ["ASR Card", "So it must do the job on its own."],
-    ["Decision Record", "So each agent reads little: small jobs, short notes."],
+    ["ADR Card", "So each agent reads little: small jobs, short notes."],
     ["QATT Card", "Proof: code across files now builds (0 → 53 lines)."],
     ["OKR Card", "Next: 3 in 4 tickets accepted."],
   ];
