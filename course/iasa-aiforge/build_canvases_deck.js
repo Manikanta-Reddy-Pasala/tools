@@ -73,6 +73,7 @@ function cell(s, x, y, w, h, title, body, o = {}) {
   const pad = 0.11;
   let ty = y + 0.07;
   if (title) { txt(s, title, { x: x + pad, y: ty, w: w - 2 * pad, h: 0.26, fontSize: o.tfs || 11, bold: true, color: o.tcol || C.accent1 }); ty += 0.29; }
+  if (o.hint) { txt(s, o.hint, { x: x + pad, y: ty - 0.03, w: w - 2 * pad, h: 0.24, fontSize: 9.5, italic: true, color: C.accent6 }); ty += 0.25; }
   if (body) txt(s, body, { x: x + pad, y: title ? ty : y, w: w - 2 * pad, h: title ? y + h - ty - 0.05 : h, fontSize: o.fs || 12,
     color: o.col || C.text1, valign: title ? "top" : "middle", align: o.align || "left", bold: !!o.bold });
 }
@@ -303,16 +304,16 @@ pres.addSection({ title: S2 });
     notes: "This is the internal-product view of the business model: the 'customers' are our own senior developers, junior developers and QA engineers (who use it for test automation), and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
   const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
   const B = (i, y, h, t, b, o) => cell(s, AX + i * cw, y, cw - g, h, t, b, o);
-  B(0, AY, top, "WHO HELPS", lines(["IT operations", "Platform operator"]));
-  B(1, AY, hh, "WHAT IT DOES", "Plan, write, test, check");
-  B(1, AY + hh + g, hh, "WHAT IT NEEDS", lines(["Own machines", "AI models", "Past run notes"]));
-  B(2, AY, top, "WHAT IT GIVES", lines(["Ticket in, tested pull request out.", "", "Code never leaves the building."]), { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, fs: 13, bold: true, tcol: C.text2 });
-  B(3, AY, hh, "TRUST", "An honest result on every pull request");
-  B(3, AY + hh + g, hh, "HOW TO REACH IT", lines(["Chat", "Ticket tracker"]));
-  B(4, AY, top, "WHO IT SERVES", lines(["Senior developers", "Junior developers", "QA engineers (test automation)"]));
+  B(0, AY, top, "WHO HELPS", lines(["IT operations", "Platform operator"]), { hint: "partners it relies on" });
+  B(1, AY, hh, "WHAT IT DOES", "Plan, write, test, check", { hint: "its main work" });
+  B(1, AY + hh + g, hh, "WHAT IT NEEDS", lines(["Own machines", "AI models", "Past run notes"]), { hint: "cannot run without" });
+  B(2, AY, top, "WHAT IT GIVES", lines(["Ticket in, tested pull request out.", "", "Code never leaves the building."]), { hint: "the value, in short", fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, fs: 13, bold: true, tcol: C.text2 });
+  B(3, AY, hh, "TRUST", "Every pull request says if it really worked", { hint: "why they come back" });
+  B(3, AY + hh + g, hh, "HOW TO REACH IT", lines(["Chat", "Ticket tracker"]), { hint: "where people use it" });
+  B(4, AY, top, "WHO IT SERVES", lines(["Senior developers", "Junior developers", "QA engineers (test automation)"]), { hint: "the users" });
   const by = AY + top + g, bh = AH - top - g, half = AW / 2;
-  cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "Machines, computing time, and one person to run it", { fill: TINT.orange, tcol: C.accent4 });
-  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for hard work; juniors move faster; QA gets tests written for them", { fill: TINT.green, tcol: C.accent5 });
+  cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "Machines, computing time, and one person to run it", { hint: "what we spend to run it", fill: TINT.orange, tcol: C.accent4 });
+  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for hard work; juniors move faster; QA gets tests written for them", { hint: "the payback: time, not money", fill: TINT.green, tcol: C.accent5 });
 }
 
 // ---------- 6. Persona Card ----------
@@ -362,7 +363,7 @@ pres.addSection({ title: S2 });
   // feeling curve
   const fy = AY + 0.6, fh = 1.15;
   box(s, x0, fy, AW - lw - 0.03, fh, { name: "Feeling band" });
-  txt(s, [{ text: "How it feels", options: { bold: true, breakLine: true } }, { text: "good at the top", options: { fontSize: 11, color: C.accent6 } }], { x: AX, y: fy, w: lw - 0.1, h: fh, fontSize: 13, color: C.text2, valign: "middle" });
+  txt(s, [{ text: "How it feels", options: { bold: true, breakLine: true } }, { text: "good at the top", options: { fontSize: 10, color: C.accent6, breakLine: true } }, { text: "orange = today", options: { fontSize: 10, color: C.accent4, breakLine: true } }, { text: "green = AIForge", options: { fontSize: 10, color: C.accent5 } }], { x: AX, y: fy, w: lw - 0.1, h: fh, fontSize: 13, color: C.text2, valign: "middle" });
   const moodY = (m) => fy + fh - 0.2 - (m - 1) * 0.19;
   const curve = (moods, color) => {
     const pts = moods.map((m, i) => [x0 + i * cw + cw / 2, moodY(m)]);
@@ -433,11 +434,11 @@ pres.addSection({ title: S3 });
   person(s, AX + 0.15, AY + 0.4, 0.75);
   txt(s, "ACTOR AND TRIGGER", { x: AX + 0.11, y: AY + 0.07, w: c1 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   txt(s, [{ text: "Developer or QA engineer", options: { bold: true, breakLine: true } }, { text: "files a ticket in the tracker" }], { x: AX + 1.0, y: AY + 0.4, w: c1 - 1.1, h: 0.8, fontSize: 12.5, valign: "middle" });
-  pill(s, AX + 0.15, AY + 1.4, c1 - 0.3, 0.36, "Runs several times a week", C.accent3, C.text2);
-  cell(s, AX, AY + 2.05, c1, AH - 2.05, "MUST ALREADY BE TRUE", [
+  pill(s, AX + 0.15, AY + 1.4, c1 - 0.3, 0.36, "Used a few times a week", C.accent3, C.text2);
+  cell(s, AX, AY + 2.05, c1, AH - 2.05, "BEFORE IT STARTS", [
     { text: "The ticket names a real project", options: { bullet: { indent: 12 }, breakLine: true } },
     { text: "The AI models are ready", options: { bullet: { indent: 12 }, breakLine: true } },
-    { text: "The code builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12.5 });
+    { text: "The code builds before we start", options: { bullet: { indent: 12 } } }], { fs: 12, hint: "must be true, or the run stops" });
   arrow(s, AX + c1 + 0.03, AY + AH / 2 - 0.15, 0.3, 0.3);
   const fx = AX + c1 + 0.35;
   box(s, fx, AY, c2, AH, { name: "Main flow" });
@@ -452,7 +453,7 @@ pres.addSection({ title: S3 });
   const ox = fx + c2 + 0.35;
   box(s, ox, AY, c3, AH, { fill: TINT.green, lineColor: HEX.accent5, name: "Outcome" });
   txt(s, "OUTCOME", { x: ox + 0.11, y: AY + 0.07, w: c3 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
-  const outs = [["A pull request", "a person reviews"], ["Or a first line", "saying it could not"], ["Either way", "a record of the run"]];
+  const outs = [["If it worked", "a pull request for a person to read and accept"], ["If it could not", "it says so in the first line — no fake success"], ["Either way", "a record of what each step did"]];
   outs.forEach(([a, b], i) => txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: ox + 0.11, y: AY + 0.5 + i * 1.15, w: c3 - 0.2, h: 1.0, fontSize: 12.5 }));
 }
 
@@ -466,20 +467,20 @@ pres.addSection({ title: S3 });
   const iw = 2.3, cwid = 2.6, cx = AX + iw + 0.64, ox = cx + cwid + 0.64, th = 2.3;
   txt(s, "GOES IN", { x: AX, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   txt(s, "COMES OUT", { x: ox, y: AY, w: iw, h: 0.26, fontSize: 11, bold: true, color: C.accent5 });
-  const ins = ["Tickets from the tracker", "The code and its history", "Past runs and lessons"], outs = ["A pull request", "A record of the run", "New lessons stored"];
+  const ins = ["Tickets from the tracker", "The code and its history", "Notes from past runs"], outs = ["A pull request", "A record of the run", "New lessons stored"];
   ins.forEach((t, i) => cell(s, AX, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.teal }));
   outs.forEach((t, i) => cell(s, ox, AY + 0.32 + i * 0.67, iw, 0.57, null, t, { fs: 12.5, fill: TINT.green, lineColor: HEX.accent5 }));
   arrow(s, AX + iw + 0.12, AY + 1.0, 0.4, 0.4);
   arrow(s, cx + cwid + 0.12, AY + 1.0, 0.4, 0.4, C.accent5);
   box(s, cx - 0.08, AY, cwid + 0.16, th, { fill: C.background2, lineColor: HEX.accent4, lw: 1.75, dash: "dash", r: 0.12, name: "System boundary" });
   s.addShape(SH.RECTANGLE, { x: cx + 0.08, y: AY + 0.38, w: cwid - 0.16, h: th - 0.54, fill: { color: C.text2 }, rectRadius: 0.1, objectName: "AIForge" });
-  txt(s, "our own machines", { x: cx, y: AY + 0.07, w: cwid, h: 0.26, fontSize: 11, italic: true, color: C.accent4, align: "center" });
+  txt(s, "dashed line = our own machines", { x: cx, y: AY + 0.07, w: cwid, h: 0.26, fontSize: 11, italic: true, color: C.accent4, align: "center" });
   txt(s, [{ text: "AIForge", options: { fontSize: 20, bold: true, color: C.accent2, breakLine: true } }, { text: "Plans the work", options: { breakLine: true } }, { text: "Writes and tests code", options: { breakLine: true } }, { text: "Checks and joins it" }],
     { x: cx + 0.2, y: AY + 0.42, w: cwid - 0.4, h: th - 0.62, fontSize: 13, color: C.background1, align: "center", valign: "middle" });
   const by = AY + th + 0.15, bh = AH - th - 0.15, bw = (AW - 0.12) / 2;
   const bl = (a) => a.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < a.length - 1 } }));
-  cell(s, AX, by, bw, bh, "WHAT WE ASSUME", bl(["The AI models are set up right", "The models stay ready, or runs stop half-way", "The ticket names a real project"]), { fs: 12.5 });
-  cell(s, AX + bw + 0.12, by, bw, bh, "WHAT TO BEWARE OF", bl(["About 3–5 files is today's limit", "Some coding languages are too hard for small models", "Shared machines limit how many tickets run at once"]), { fs: 12.5, fill: TINT.orange, tcol: C.accent4 });
+  cell(s, AX, by, bw, bh, "WHAT WE ASSUME", bl(["The AI models are set up right", "The models stay ready, or runs stop half-way", "The ticket names a real project"]), { fs: 12, hint: "if any is false, the run fails" });
+  cell(s, AX + bw + 0.12, by, bw, bh, "WHAT TO BEWARE OF", bl(["About 3–5 files is today's limit", "Some languages are too hard for small models", "Shared machines: few tickets at once"]), { fs: 12, hint: "known limits today", fill: TINT.orange, tcol: C.accent4 });
 }
 
 // ---------- 11. Service Blueprint ----------
@@ -498,7 +499,7 @@ pres.addSection({ title: S3 });
     ["The person sees", ["the ticket they wrote", "a run in progress", "test output", "a pull request and a result"], C.background1, C.accent1],
     ["The person does", ["files it, in plain words", "nothing — goes elsewhere", "nothing", "reads, comments, accepts"], C.background1, C.accent1],
     ["The system shows", ["ticket is picked up", "a copy of the code opens", "build check runs", "pull request opens"], TINT.teal, C.accent1],
-    ["Agents (hidden)", ["make the ticket clear", "plan, then write", "test, check, join up", "write the result"], C.accent3, C.text2],
+    ["AI agents (hidden)", ["make the ticket clear", "plan, then write", "test, check, join up", "write the result"], C.accent3, C.text2],
     ["Platform (hidden)", ["ticket store", "AI models on our machines", "build tools, test runners", "run history, lessons kept"], C.accent3, C.text2],
   ];
   rows.forEach(([label, vals, fill, col], r) => {
@@ -553,7 +554,7 @@ pres.addSection({ title: S3 });
   box(s, AX, AY, AW, 0.78, { name: "Capability header" });
   txt(s, [{ text: "BUILD THE CHANGE", options: { fontSize: 11, bold: true, color: C.accent1, breakLine: true } }, { text: "Turn an agreed plan into code that builds and fits the project." }],
     { x: AX + 0.15, y: AY, w: 5.0, h: 0.78, fontSize: 13, valign: "middle" });
-  txt(s, "HOW MATURE", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
+  txt(s, "HOW GOOD ARE WE AT IT TODAY?", { x: AX + 5.3, y: AY + 0.06, w: 3.0, h: 0.22, fontSize: 10, bold: true, color: C.accent6, align: "center" });
   ["Growing", "Good", "Strong"].forEach((t, i) => {
     const on = i === 1;
     s.addShape(SH.RECTANGLE, { x: AX + 5.3 + i * 1.02, y: AY + 0.31, w: 0.97, h: 0.36, fill: { color: on ? C.accent5 : C.background2 }, rectRadius: 0.06, line: { color: HEX.accent3, width: 1 }, objectName: "Maturity step" });
@@ -561,20 +562,20 @@ pres.addSection({ title: S3 });
   });
   const cw = (AW - 0.24) / 3, cy = AY + 0.9, ch = 2.15;
   const cols = [
-    ["People", ["One person runs the platform today", "Senior developer reviews the output", "Nobody owns the AI models yet"], C.accent1],
-    ["Process", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is accepted"], C.text2],
-    ["Tools", ["AI models on our own machines", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
+    ["People", "who does it", ["One person runs the platform today", "Senior developer reviews the output", "Nobody owns the AI models yet"], C.accent1],
+    ["Process", "how it is done", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is accepted"], C.text2],
+    ["Tools", "what it runs on", ["AI models on our own machines", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
   ];
-  cols.forEach(([h, items, col], i) => {
+  cols.forEach(([h, hint, items, col], i) => {
     const x = AX + i * (cw + 0.12);
     box(s, x, cy, cw, ch, { name: "Capability column" });
     num(s, x + 0.12, cy + 0.12, i + 1, 0.4, col);
-    txt(s, h, { x: x + 0.62, y: cy + 0.12, w: cw - 0.75, h: 0.4, fontSize: 15, bold: true, color: C.text2, valign: "middle" });
+    txt(s, [{ text: h, options: { fontSize: 15, bold: true, color: C.text2 } }, { text: "   " + hint, options: { fontSize: 11, italic: true, color: C.accent6 } }], { x: x + 0.62, y: cy + 0.12, w: cw - 0.75, h: 0.4, valign: "middle" });
     txt(s, items.map((v, j) => ({ text: v, options: { bullet: { indent: 12 }, breakLine: j < items.length - 1 } })), { x: x + 0.14, y: cy + 0.62, w: cw - 0.28, h: ch - 0.7, fontSize: 12.5, paraSpaceAfter: 2 });
   });
   const gy = cy + ch + 0.12, gh = AH - (gy - AY);
   box(s, AX, gy, AW, gh, { fill: TINT.orange, lineColor: HEX.accent4, name: "Gap to target" });
-  txt(s, "GAP TO TARGET", { x: AX + 0.15, y: gy + 0.07, w: 3, h: 0.26, fontSize: 11, bold: true, color: C.accent4 });
+  txt(s, "WHAT IS MISSING (TODAY → WHAT WE WANT)", { x: AX + 0.15, y: gy + 0.07, w: 6, h: 0.26, fontSize: 11, bold: true, color: C.accent4 });
   ["Limit is 3–5 files; we want 8–10", "Memory not yet shared across the team", "No second person trained yet"].forEach((t, i) => {
     txt(s, t, { x: AX + 0.15 + i * (AW - 0.3) / 3, y: gy + 0.34, w: (AW - 0.3) / 3 - 0.15, h: gh - 0.38, fontSize: 12.5, bold: true, color: C.text1 });
   });
@@ -596,19 +597,20 @@ pres.addSection({ title: S4 });
   s.addShape(SH.RECTANGLE, { x: AX, y: AY + AH - 0.14, w: AW, h: 0.14, fill: { color: C.accent6 }, objectName: "Ground" });
   const asr = [
     ["Do the job on its own", "Ticket in, pull request out. Nobody in the middle.", "RISK", "Bad automatic changes destroy trust fast.", "First full run: ticket to pull request with no help.", "HIGH"],
-    ["Make the files fit together", "Change five files and they still build as one.", "RISK", "Big tickets look done but do not build.", "0 → 53 working linked lines with a shared plan.", "HIGH"],
-    ["Stay on our machines", "Machines we own. No cloud. Works offline.", "COST", "Our own AI models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
+    ["Make the files fit together", "Change five files and they still build as one.", "RISK", "Big tickets look done but do not build.", "Code across files builds: 0 lines before, 53 after.", "HIGH"],
+    ["Stay on our machines", "Machines we own. No cloud. Works offline.", "COST", "Our own models are weaker than cloud ones.", "Zero runs have sent data outside.", "MEDIUM-HIGH"],
   ];
   asr.forEach(([h, b, rl, rk, p, lvl], i) => {
     const x = AX + sp + i * (cw + sp), hi = lvl === "HIGH";
     box(s, x, py, cw, ph, { r: 0.02, name: "Pillar" });
     num(s, x + 0.12, py + 0.1, i + 1, 0.4);
-    pill(s, x + cw - 1.42, py + 0.14, 1.3, 0.32, lvl, hi ? C.accent4 : C.accent2, hi ? C.background1 : C.text1);
+    s.addShape(SH.RECTANGLE, { x: x + cw - 1.97, y: py + 0.14, w: 1.85, h: 0.32, fill: { color: hi ? C.accent4 : C.accent2 }, objectName: "Importance" });
+    txt(s, "IMPORTANCE: " + lvl.replace("MEDIUM", "MED"), { x: x + cw - 1.97, y: py + 0.14, w: 1.85, h: 0.32, fontSize: 9.5, bold: true, align: "center", valign: "middle", color: hi ? C.background1 : C.text1 });
     txt(s, h, { x: x + 0.12, y: py + 0.56, w: cw - 0.24, h: 0.52, fontSize: 14.5, bold: true, color: C.text2, valign: "middle" });
     txt(s, b, { x: x + 0.12, y: py + 1.1, w: cw - 0.24, h: 0.5, fontSize: 12 });
-    txt(s, [{ text: rl + "  ", options: { bold: true, color: C.accent4, fontSize: 11 } }, { text: rk }], { x: x + 0.12, y: py + 1.62, w: cw - 0.24, h: 0.5, fontSize: 12 });
+    txt(s, [{ text: (rl === "RISK" ? "IF IT BREAKS:" : "THE PRICE:") + "  ", options: { bold: true, color: C.accent4, fontSize: 10.5 } }, { text: rk }], { x: x + 0.12, y: py + 1.62, w: cw - 0.24, h: 0.5, fontSize: 12 });
     box(s, x + 0.1, py + 2.2, cw - 0.2, ph - 2.3, { fill: TINT.green, lineColor: TINT.green, name: "Proof" });
-    txt(s, [{ text: "PROOF  ", options: { bold: true, color: C.accent5, fontSize: 11 } }, { text: p }], { x: x + 0.18, y: py + 2.2, w: cw - 0.36, h: ph - 2.3, fontSize: 12, valign: "middle" });
+    txt(s, [{ text: "PROOF IT HOLDS:  ", options: { bold: true, color: C.accent5, fontSize: 10.5 } }, { text: p }], { x: x + 0.18, y: py + 2.2, w: cw - 0.36, h: ph - 2.3, fontSize: 11, valign: "middle" });
   });
 }
 
@@ -616,11 +618,11 @@ pres.addSection({ title: S4 });
 {
   const s = canvasSlide({ section: S4, n: 11, stage: "How?", name: "QATT Card", q: "how do we turn “it must be good” into a number?",
     thumb: "qatt", what: "A quality written as a test: who does what, and what we measure.",
-    ex: "A five-file ticket must come out as one change that builds. Measured: 0 → 53 working lines.",
+    ex: "A five-file ticket must come out as one change that builds. Code that links across files: 0 lines before, 53 after.",
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
     notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
   txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
-  const parts = [["WHO", "A developer or QA engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
+  const parts = [["WHO", "A developer or QA engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal day, on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "lines linking across files that build: 0 → 53"]];
   const pw = AW / 6;
   parts.forEach(([t, b], i) => {
     const last = i === 5;
@@ -628,18 +630,18 @@ pres.addSection({ title: S4 });
     txt(s, t, { x: AX + i * pw + 0.16, y: AY + 0.42, w: pw - 0.2, h: 0.38, fontSize: 10, bold: true, color: C.background1, align: "center", valign: "middle" });
     cell(s, AX + i * pw + 0.02, AY + 0.86, pw - 0.07, 1.02, null, b, { fs: 12, align: "center", fill: last ? C.accent2 : C.background1, lineColor: last ? HEX.accent4 : HEX.accent3, bold: last });
   });
-  txt(s, "MORE SCENARIOS", { x: AX, y: AY + 2.02, w: AW, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
+  txt(s, "MORE SCENARIOS  —  the same idea, written short", { x: AX, y: AY + 2.02, w: AW, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
   const more = [
-    ["Nothing leaves our network", "A check fails the build if it would call out", "Running today, small batch", C.accent5],
-    ["We know the size limit", "Count files one ticket handles cleanly", "3–5 files now", C.accent4],
-    ["Team memory does not grow too big", "Count duplicate notes each week", "Merge step designed", C.accent6],
+    ["Nothing leaves our network", "A check fails the build if it would call out", "Today: working, small batch", C.accent5],
+    ["We know the size limit", "Count files one ticket handles cleanly", "Today: 3–5 files", C.accent4],
+    ["Team memory does not grow too big", "Count duplicate notes each week", "Today: fix designed, not built", C.accent6],
   ];
   const cw = (AW - 0.24) / 3, my = AY + 2.32, mh = AH - 2.32;
   more.forEach(([h, chk, st, col], i) => {
     const x = AX + i * (cw + 0.12);
     box(s, x, my, cw, mh, { name: "Scenario card" });
     txt(s, h, { x: x + 0.14, y: my + 0.08, w: cw - 0.28, h: 0.5, fontSize: 13, bold: true, color: C.text2, valign: "middle" });
-    txt(s, [{ text: "Check:  ", options: { bold: true, color: C.accent1 } }, { text: chk }], { x: x + 0.14, y: my + 0.64, w: cw - 0.28, h: 0.56, fontSize: 12.5 });
+    txt(s, [{ text: "How we check:  ", options: { bold: true, color: C.accent1 } }, { text: chk }], { x: x + 0.14, y: my + 0.64, w: cw - 0.28, h: 0.56, fontSize: 12.5 });
     pill(s, x + 0.14, my + mh - 0.44, cw - 0.28, 0.34, st, col, C.background1);
   });
 }
@@ -651,9 +653,9 @@ pres.addSection({ title: S4 });
     ex: "We picked many small agents. We dropped the ready-made tool, one big model, and cloud AI.",
     short: "we did not pick it because we liked it — it is the one our tests kept passing.",
     notes: "Myth we tested: 'just wait for a bigger model'. Same models, same machines — only splitting the work differently fixed it. The decisions log has four settled decisions and three still open, all about team memory." });
-  cell(s, AX, AY, AW, 0.86, "THE SITUATION", "Our AI models hold about 3–5 files at once. A many-file ticket must still build as one piece, and no code may leave.", { fs: 12.5 });
+  cell(s, AX, AY, AW, 0.86, "THE PROBLEM WE HAD", "Our AI models hold about 3–5 files at once. A many-file ticket must still build as one piece, and no code may leave.", { fs: 12.5 });
   const ow = (AW - 0.36) / 4, oy = AY + 0.94, oh = 1.38;
-  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "0 working lines on a many-file ticket.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Many small agents", "0 → 53 working lines. Always builds first.", true]];
+  const opts = [["Ready-made agent", "Broke on our model server; cannot build Java.", false], ["One big model", "On a many-file ticket, nothing it wrote worked.", false], ["Cloud AI", "Works — and sends our code outside. Not allowed.", false], ["Many small agents", "The only one that built: 53 linked lines.", true]];
   opts.forEach(([h, b, pick], i) => {
     const x = AX + i * (ow + 0.12);
     box(s, x, oy, ow, oh, { fill: pick ? C.accent1 : C.background1, lineColor: pick ? HEX.accent1 : HEX.accent3, name: "Option" });
@@ -662,8 +664,8 @@ pres.addSection({ title: S4 });
     txt(s, b, { x: x + 0.12, y: oy + 0.74, w: ow - 0.24, h: 0.6, fontSize: 12, color: pick ? C.background1 : C.text1 });
   });
   const dy = oy + oh + 0.08, dh = AH - (dy - AY), w1 = 3.05, w2 = 3.05, w3 = AW - w1 - w2 - 0.24;
-  cell(s, AX, dy, w1, dh, "DECISION — WE WILL…", "finish each ticket with a line of small agents, each with one small job. Simple tickets skip the line.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 12.5, bold: true });
-  cell(s, AX + w1 + 0.12, dy, w2, dh, "WHAT FOLLOWS", [
+  cell(s, AX, dy, w1, dh, "OUR DECISION — WE WILL…", "finish each ticket with a line of small agents, each with one small job. Simple tickets skip the line.", { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, tcol: C.text2, fs: 12.5, bold: true });
+  cell(s, AX + w1 + 0.12, dy, w2, dh, "WHAT IT MEANS FOR US", [
     { text: "+ ", options: { bold: true, color: C.accent5 } }, { text: "each role is checked on its own; a bad part fails alone", options: { breakLine: true } },
     { text: "– ", options: { bold: true, color: C.accent4 } }, { text: "more AI calls, more waiting, more moving parts" }], { fs: 12.5 });
   const rx = AX + w1 + w2 + 0.24;
@@ -673,7 +675,7 @@ pres.addSection({ title: S4 });
   s.addShape(SH.OVAL, { x: rx + 0.42, y: dy + 0.41, w: 0.22, h: 0.22, fill: { color: C.accent5 }, objectName: "Reversibility marker" });
   txt(s, "easy to undo", { x: rx + 0.11, y: dy + 0.66, w: w3 / 2, h: 0.22, fontSize: 10, color: C.accent6 });
   txt(s, "permanent", { x: rx + w3 / 2, y: dy + 0.66, w: w3 / 2 - 0.11, h: 0.22, fontSize: 10, color: C.accent6, align: "right" });
-  txt(s, [{ text: "Belief we tested: ", options: { bold: true } }, { text: "“more agents must be better”", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.94, w: w3 - 0.22, h: dh - 1.0, fontSize: 12 });
+  txt(s, [{ text: "We can switch back to one model.", options: { breakLine: true } }, { text: "Owner: ", options: { bold: true } }, { text: "project lead" }], { x: rx + 0.11, y: dy + 0.92, w: w3 - 0.22, h: dh - 0.96, fontSize: 11 });
 }
 
 pres.addSection({ title: S5 });
@@ -689,7 +691,7 @@ pres.addSection({ title: S5 });
   txt(s, [{ text: "GOAL   ", options: { bold: true, color: C.accent2, fontSize: 11 } }, { text: "Make AIForge the normal way small work gets done", options: { bold: true, color: C.background1 } }], { x: AX + 0.2, y: AY, w: AW - 0.4, h: 0.68, fontSize: 16, valign: "middle" });
   const kx = AX, kw = 3.45, bx = AX + 3.6, bw = 2.5, tx = bx + bw + 0.15, tw = 1.15, gx2 = tx + tw + 0.05, gw = AX + AW - gx2;
   const hy = AY + 0.76;
-  [["WHAT WE MEASURE", kx, kw, "left"], ["PROGRESS TO TARGET", bx, bw, "left"], ["TODAY", tx, tw, "center"], ["TARGET", gx2, gw, "center"]].forEach(([t, x, w, a]) => txt(s, t, { x, y: hy, w, h: 0.24, fontSize: 10, bold: true, color: C.accent6, align: a }));
+  [["WHAT WE COUNT", kx, kw, "left"], ["HOW CLOSE WE ARE", bx, bw, "left"], ["TODAY", tx, tw, "center"], ["TARGET", gx2, gw, "center"]].forEach(([t, x, w, a]) => txt(s, t, { x, y: hy, w, h: 0.24, fontSize: 10, bold: true, color: C.accent6, align: a }));
   const krs = [
     ["Tickets that end in an accepted pull request", null, "Not measured", "3 in 4", C.accent4],
     ["Files one ticket can change cleanly", 0.45, "3 to 5", "8 to 10", C.accent4],
@@ -723,15 +725,15 @@ pres.addSection({ title: S5 });
     txt(s, q, { x: x0 + i * cw, y: AY, w: cw, h: 0.5, fontSize: 15, bold: true, color: C.background1, align: "center", valign: "middle" });
   });
   const rows = [
-    ["Product", ["Honest result on every pull request", "Team memory sharing live", "Bigger tickets, more files", "Open to every team"], C.accent1, TINT.teal],
-    ["Platform", ["Bigger machines planned", "Bigger AI models tested", "IT runs the AI models", "Machine needs planned ahead"], C.accent4, TINT.orange],
-    ["People", ["Second person named", "QA owns the test check", "Juniors start using it", "Use measured every month"], C.accent5, TINT.green],
+    ["Product", "what users get", ["Honest result on every pull request", "Team memory sharing live", "Bigger tickets, more files", "Open to every team"], C.accent1, TINT.teal],
+    ["Platform", "machines and models", ["Bigger machines planned", "Bigger AI models tested", "IT runs the AI models", "Machine needs planned ahead"], C.accent4, TINT.orange],
+    ["People", "who owns and uses it", ["Second person named", "QA owns the test check", "Juniors start using it", "Use measured every month"], C.accent5, TINT.green],
   ];
   const ry = AY + 0.6, pitch = (AH - 0.6) / 3;
-  rows.forEach(([label, vals, col, fill], r) => {
+  rows.forEach(([label, hint, vals, col, fill], r) => {
     const y = ry + r * pitch, h = pitch - 0.1;
     s.addShape(SH.RECTANGLE, { x: AX, y, w: lw - 0.1, h, fill: { color: col }, rectRadius: 0.08, objectName: "Row label" });
-    txt(s, label, { x: AX, y, w: lw - 0.1, h, fontSize: 15, bold: true, color: C.background1, align: "center", valign: "middle" });
+    txt(s, [{ text: label, options: { fontSize: 15, bold: true, breakLine: true } }, { text: hint, options: { fontSize: 10 } }], { x: AX + 0.04, y, w: lw - 0.18, h, color: C.background1, align: "center", valign: "middle" });
     vals.forEach((v, i) => cell(s, x0 + i * cw, y, cw - 0.07, h, null, v, { fill, lineColor: fill, align: "center", fs: 13 }));
   });
 }
@@ -750,7 +752,7 @@ pres.addSection({ title: S6 });
     ["Customer Journey", "The wait is the cost, not the typing."],
     ["ASR Card", "So it must do the job on its own."],
     ["Decision Record", "So we use a line of small agents."],
-    ["QATT Card", "Proof: 0 → 53 linked lines."],
+    ["QATT Card", "Proof: code across files now builds (0 → 53 lines)."],
     ["OKR Card", "Next: 3 in 4 tickets accepted."],
   ];
   const w = 1.72, gap = (12.13 - 6 * w) / 5;
