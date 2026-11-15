@@ -128,33 +128,35 @@ function thumb(s, kind, x, y, w, h) {
 
 // left panel "how to read it", one per canvas
 const READ = {
-  bmc: "Left: what it takes (partners, work, needs). Middle: the value. Right: who it is for and where they use it. Bottom: cost against payback.",
-  persona: "Left: who the person is, in their own words. Right: their day, what they want, what stops them, and what makes them trust the tool.",
-  journey: "Read left to right: one ticket's life. The lines show how the person feels. Orange = today, green = with AIForge.",
-  grid: "Each group sits by power (up) and interest (right). The corner says how to treat them. Orange = a job with no owner yet.",
-  usecase: "Left: who starts it and what must be true first. Middle: the 7 steps AIForge runs. Right: what comes out.",
-  context: "Middle: AIForge inside our own machines (dashed line). Left: what it reads. Right: what it writes back. Bottom: what we assume, and known limits.",
-  blueprint: "Read across: one example ticket, from ask to hand back. Above the orange line: what the person sees and does. Below: what AIForge does out of sight.",
-  capmap: "Columns: the stages of getting a code change done. Each box: one thing the team must be able to do. Colour: who does it today.",
-  capcard: "Zoom into ONE box of the capability map: \u201cBuild the change\u201d. Top: how good we are. Middle: what it needs. Bottom: what is missing.",
-  asr: "Each pillar is one must-have rule. It shows how important it is, what breaks without it, and the proof it holds today.",
-  qatt: "Read the top row as one sentence: who does what, where, to what, what should happen, and the number we measure.",
-  adr: "Top: the problem. Middle: the options we looked at, one chosen. Bottom: the decision, what it means for us, and if we can undo it.",
-  okr: "Dark bar: the goal. Each row: one number that shows progress, with why it matters. Compare today with the target.",
-  roadmap: "Columns: quarters. Rows: product (what users get), platform (machines and models), people (who owns and uses it).",
+  bmc: ["Left → what it takes", "Middle → the value", "Right → who it is for", "Bottom → cost against payback"],
+  persona: ["Left → who they are", "Top right → their day, wants", "Bottom right → blocks, trust"],
+  journey: ["Left to right → one ticket's life", "Lines → how it feels", "Orange = today · Green = AIForge"],
+  grid: ["Up → more power", "Right → more interest", "Corner → how to treat them", "Orange → a job with no owner"],
+  usecase: ["Left → who starts it", "Middle → the 7 steps", "Right → what comes out"],
+  context: ["Left → what AIForge reads", "Middle → AIForge, on our machines", "Right → what it writes back", "Bottom → assumptions and limits"],
+  blueprint: ["Left to right → one ticket", "Above the line → the person", "Below the line → AIForge, unseen"],
+  capmap: ["Columns → stages of a change", "Each box → one ability", "Grey = AIForge · Yellow = partly", "Dashed = people only"],
+  capcard: ["Top → the ability and its rating", "Middle → people, process, tools", "Bottom → what is missing"],
+  asr: ["Each pillar → one rule", "Badge → how important it is", "Green box → proof it holds"],
+  qatt: ["Top row → read as one sentence", "Orange box → the number", "Bottom → more checks, in short"],
+  adr: ["Top → the problem", "Middle → the options, one chosen", "Bottom → decision, effect, undo"],
+  okr: ["Dark bar → the goal", "Each row → one number, and why", "Compare today with the target"],
+  roadmap: ["Columns → quarters", "Rows → product, platform, people", "Read each row left to right"],
 };
 // canvas slide frame: left = what the canvas is, right = the canvas itself filled for AIForge
 const AX = 4.25, AY = 1.9, AW = 8.48, AH = 4.05;
 function canvasSlide(o) {
   const s = content(o.section, o.name, [{ text: "It answers:  ", options: { bold: true, color: C.accent1 } }, { text: o.q }]);
   sticky(s, o.stage, `Canvas ${o.n} of ${TOTAL}`);
-  const lab = (t, y) => txt(s, t, { x: 0.6, y: AY + y, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: C.accent6, charSpacing: 1 });
-  lab("WHAT IT IS", 0);
-  txt(s, o.what, { x: 0.6, y: AY + 0.28, w: 3.3, h: 0.8, fontSize: 14 });
-  lab("HOW TO READ IT", 1.12);
-  txt(s, READ[o.thumb], { x: 0.6, y: AY + 1.4, w: 3.3, h: 1.3, fontSize: 12.5 });
-  lab("IN AIFORGE", 2.82);
-  txt(s, o.ex, { x: 0.6, y: AY + 3.1, w: 3.3, h: 0.95, fontSize: 13 });
+  // left panel: three equal boxes, same type size, label strip on top
+  const pw = 3.2, gap = 0.12, ph = (AH - 2 * gap) / 3;
+  [["WHAT IT IS", o.what, C.background1], ["HOW TO READ IT", lines(READ[o.thumb]), C.background1], ["IN AIFORGE", o.ex, C.accent2]].forEach(([label, body, fill], i) => {
+    const y = AY + i * (ph + gap);
+    box(s, 0.6, y, pw, ph, { fill, r: 0, name: label });
+    s.addShape(SH.RECTANGLE, { x: 0.6, y, w: pw, h: 0.3, fill: { color: i === 2 ? C.accent1 : C.accent3 }, line: { color: LINE, width: 0.75 }, objectName: label + " label" });
+    txt(s, label, { x: 0.72, y, w: pw - 0.24, h: 0.3, fontSize: 10.5, bold: true, color: i === 2 ? C.background1 : C.text2, valign: "middle", charSpacing: 1 });
+    txt(s, body, { x: 0.72, y: y + 0.36, w: pw - 0.24, h: ph - 0.42, fontSize: 12, valign: "top" });
+  });
   inShort(s, o.short);
   s.addNotes(o.notes);
   return s;
@@ -315,8 +317,8 @@ pres.addSection({ title: S2 });
 // ---------- 5. Business Model Canvas ----------
 {
   const s = canvasSlide({ section: S2, n: 1, stage: "Why?", name: "Business Model Canvas", q: "how does this create value, and for whom?",
-    thumb: "bmc", what: "Nine boxes that show how something gives value, to whom, and at what cost.",
-    ex: "Ticket in, tested pull request out. It costs machines and one person; it gives senior hours back.",
+    thumb: "bmc", what: "Nine boxes: how something gives value, to whom, and at what cost.",
+    ex: "Ticket in, tested pull request out. Costs machines and one person; gives senior hours back.",
     short: "AIForge sells nothing. It gives senior hours back, inside our own walls.",
     notes: "This is the internal-product view of the business model: the 'customers' are our own senior developers, junior developers and QA engineers (who use it for test automation), and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
   const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
@@ -336,8 +338,8 @@ pres.addSection({ title: S2 });
 // ---------- 6. Persona Card ----------
 {
   const s = canvasSlide({ section: S2, n: 2, stage: "Who?", name: "Persona Card", q: "who exactly are we building for?",
-    thumb: "persona", what: "One page about one real kind of user, in their own words.",
-    ex: "The senior developer: “Half my week goes on work I already know how to do.”",
+    thumb: "persona", what: "One page about one kind of user, in their own words.",
+    ex: "Senior developer: “Half my week goes on work I already know how to do.”",
     short: "built for senior developers first, then juniors and QA engineers.",
     notes: "Three personas exist: senior developer (primary), junior developer, QA engineer (uses AIForge to write and run automated tests). Only the primary one is drawn in full. Honest adoption test: does a junior or QA engineer file a ticket, or still walk over to a senior? Today, mostly the second." });
   box(s, AX, AY, AW, AH, { name: "Persona card" });
@@ -365,7 +367,7 @@ pres.addSection({ title: S2 });
 // ---------- 7. Customer Journey Map ----------
 {
   const s = canvasSlide({ section: S2, n: 3, stage: "Who?", name: "Customer Journey Map", q: "where does the person wait, and how does it feel?",
-    thumb: "journey", what: "The steps a person goes through, and how each step feels.",
+    thumb: "journey", what: "The steps a person goes through, and how each one feels.",
     ex: "Today a ticket waits days for a senior. With AIForge the work starts at once.",
     short: "the cost was never the typing — it was the waiting. AIForge removes the wait.",
     notes: "Read the orange line first (today), then the green one (with AIForge). The person now joins at the pull request, not before it." });
@@ -401,7 +403,7 @@ pres.addSection({ title: S2 });
 // ---------- 8. Power / Interest Grid ----------
 {
   const s = canvasSlide({ section: S2, n: 4, stage: "Who?", name: "Power / Interest Grid", q: "who must we win over, and who must own it?",
-    thumb: "grid", what: "Up = power: can they stop or approve it? Right = interest: how much does it touch their work?",
+    thumb: "grid", what: "Who can stop or approve AIForge, and how much it touches their work.",
     ex: "Developers and QA use it. Three jobs (orange) still have no owner.",
     short: "the tool works. What is left is people — three jobs still have no owner.",
     notes: "Read it corner by corner. Top right (manage closely) = people who decide and care: meet them often. Top left (keep satisfied) = people who can stop it but are not involved yet. Bottom right (keep informed) = the users: tell them every change. Bottom left (monitor) = not involved yet. Orange boxes are the three jobs with no owner today: IT operations must own the AI models, QA must own the test check on AI pull requests, and the platform needs a second operator." });
@@ -443,7 +445,7 @@ pres.addSection({ title: S3 });
 {
   const s = canvasSlide({ section: S3, n: 5, stage: "What?", name: "Use Case Card", q: "who starts it, what happens, and what comes out?",
     thumb: "usecase", what: "One job the system does: who starts it, the steps, the result.",
-    ex: "A developer or QA engineer files a ticket. Seven steps later a pull request is ready to read.",
+    ex: "A developer or QA engineer files a ticket. Seven steps later a pull request is ready.",
     short: "the senior spends minutes reading instead of hours writing.",
     notes: "The use case is 'one small change'. Simple tickets skip most of the seven steps; only real multi-file work runs them all." });
   const c1 = 2.45, c2 = 3.55, c3 = AW - c1 - c2 - 0.7;
@@ -477,8 +479,8 @@ pres.addSection({ title: S3 });
 // ---------- 10. Context View ----------
 {
   const s = canvasSlide({ section: S3, n: 6, stage: "What?", name: "Context View", q: "what is inside the system, and what does it touch?",
-    thumb: "context", what: "The system drawn as one box: what it reads, what it writes back, and where its edge is.",
-    ex: "AIForge reads a ticket, our code and its memory notes. It writes back a pull request, a run record and new notes. All on our own machines.",
+    thumb: "context", what: "The system as one box: what it reads, what it writes, where its edge is.",
+    ex: "Reads a ticket, our code and memory notes. Writes a pull request, a run record, new notes.",
     short: "write the unknowns down, not just the boxes — the edges are where runs fail.",
     notes: "Walk it left to right with the example ticket 'Add a CSV export to the orders report'. The ticket comes from the tracker; AIForge reads the git repo it must change and the OKF memory notes from past runs (what worked, what failed in this repo). Out comes a pull request on our git server, a record of every agent step, and new notes for next time. The dashed line is the edge of our own machines: nothing crosses it." });
   const iw = 2.45, cwid = 2.3, cx = AX + iw + 0.6, ox = cx + cwid + 0.6, th = 2.3;
@@ -507,8 +509,8 @@ pres.addSection({ title: S3 });
 // ---------- 11. Service Blueprint ----------
 {
   const s = canvasSlide({ section: S3, n: 7, stage: "What?", name: "Service Blueprint", q: "what does the person see, and what runs behind it?",
-    thumb: "blueprint", what: "One service shown in layers: what the person meets on top, the work behind it below.",
-    ex: "A QA engineer files “Add CSV export to the orders report”. They only write the ticket and read the pull request. The agents do the rest.",
+    thumb: "blueprint", what: "One service in layers: what the person meets on top, the work behind it below.",
+    ex: "A QA engineer files “Add CSV export”. They write the ticket and read the result; agents do the rest.",
     short: "the person acts twice: file the ticket, read the result. The rest is below the line.",
     notes: "Follow the example ticket across the four stages. Top three rows are what the person sees and does, and what AIForge shows them. Below the orange line is everything they never see: which agent does what, and what the platform provides. The design work is all below the line; the person's experience is just two moments." });
   const lw = 1.55, cw = (AW - lw) / 4, x0 = AX + lw, rh = 0.6, pitch = 0.65;
@@ -536,8 +538,8 @@ pres.addSection({ title: S3 });
 // ---------- 12. Business Capability Map ----------
 {
   const s = canvasSlide({ section: S3, n: 8, stage: "What?", name: "Business Capability Map", q: "what must the business be good at — and who does it today?",
-    thumb: "capmap", what: "Every ability needed to turn a request into shipped code, done by a person or AIForge.",
-    ex: "Of the 18 abilities, AIForge does 11 today and 3 in part. People still decide, accept and measure.",
+    thumb: "capmap", what: "Every ability needed to turn a request into shipped code.",
+    ex: "Of 18 abilities, AIForge does 11 and 3 in part. People still decide, accept and measure.",
     short: "11 of 18 done by AIForge today, 3 partly. The rest still needs an owner.",
     notes: "Grey = AIForge does this today. Yellow = partly, being built. White with a dashed edge = still all people. The white boxes are mostly about ownership: prioritising, merging, measuring." });
   const cw = AW / 6;
@@ -568,8 +570,8 @@ pres.addSection({ title: S3 });
 // ---------- 13. Capability Card ----------
 {
   const s = canvasSlide({ section: S3, n: 9, stage: "What?", name: "Capability Card", q: "what does one ability need — people, process, tools?",
-    thumb: "capcard", what: "One ability taken apart: people, process, tools, and how grown-up it is.",
-    ex: "“Build the change” is rated Good: it works on small tickets (3–5 files), not yet on big ones (8–10).",
+    thumb: "capcard", what: "One ability taken apart: people, process, tools, and how good we are at it.",
+    ex: "“Build the change” is rated Good: fine on 3–5 files, not yet on 8–10.",
     short: "to improve: bigger AI models, shared memory, and a named owner for the platform.",
     notes: "This card is for the capability 'Build the change'. Maturity today is Good. The weakest link overall is memory: it works, but sharing it across the team is only now being built." });
   box(s, AX, AY, AW, 1.0, { name: "Capability header" });
@@ -639,8 +641,8 @@ pres.addSection({ title: S4 });
 // ---------- 15. QATT Card ----------
 {
   const s = canvasSlide({ section: S4, n: 11, stage: "How?", name: "QATT Card", q: "how do we turn “it must be good” into a number?",
-    thumb: "qatt", what: "A quality written as a test: who does what, and what we measure.",
-    ex: "A five-file ticket must come out as one change that builds. Code that links across files: 0 lines before, 53 after.",
+    thumb: "qatt", what: "A quality goal written as a test, with a number.",
+    ex: "A five-file ticket must come out as one change that builds: 0 lines before, 53 after.",
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
     notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
   txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
@@ -672,7 +674,7 @@ pres.addSection({ title: S4 });
 {
   const s = canvasSlide({ section: S4, n: 12, stage: "How?", name: "Decision Record (ADR)", q: "what did we decide, what else did we consider, and why?",
     thumb: "adr", what: "A short note of one choice: what we picked, what we dropped, and why.",
-    ex: "How should agents remember past work? We picked short OKF notes over plain RAG, a graph database, or no memory.",
+    ex: "How agents remember past work: short OKF notes, not plain RAG, a graph DB, or nothing.",
     short: "small models need less to read, not more. A few short notes beat a big pile of search results.",
     notes: "OKF = Open Knowledge Format (v0.1): a folder of Markdown files, one fact per file, a 'type' at the top (learning, solution, task...), and links between files. AIForge finds the right notes with a small keyword + meaning search (SQLite) and gives each agent only those few. Classic RAG chops all code and documents into pieces and pastes the closest pieces into the prompt: on small local models that floods the 3–5-file window with half-related text. We also tried a graph database (Neo4j) and dropped it: heavy to run and to keep in step with the code. The decision log also holds the earlier choice of many small agents — same reason: keep what each model reads small." });
   cell(s, AX, AY, AW, 0.86, "THE PROBLEM WE HAD", "Agents must remember what worked before: team rules, past fixes, known traps. But our small AI models can only read a little at once — give them too much and they lose the point.", { fs: 12 });
@@ -710,7 +712,7 @@ pres.addSection({ title: S5 });
 {
   const s = canvasSlide({ section: S5, n: 13, stage: "Where next?", name: "OKR Card", q: "what does good look like, in numbers we can check?",
     thumb: "okr", what: "OKR = one goal, and a few numbers that show progress.",
-    ex: "Goal: small tickets go through AIForge by default. The key number, how many of its pull requests get accepted, is not counted yet.",
+    ex: "Goal: small tickets go through AIForge. Key number, accepted pull requests, is not counted yet.",
     short: "the tool works; now we must measure how often it succeeds. The first row is the problem.",
     notes: "Without the first number there is no case to make this standard practice. Bars show how far today is from target; the dashed bar means we do not measure it yet." });
   s.addShape(SH.RECTANGLE, { x: AX, y: AY, w: AW, h: 0.68, fill: { color: C.text2 }, rectRadius: 0.08, objectName: "Objective" });
@@ -741,8 +743,8 @@ pres.addSection({ title: S5 });
 // ---------- 18. Roadmap Canvas ----------
 {
   const s = canvasSlide({ section: S5, n: 14, stage: "Where next?", name: "Roadmap Canvas", q: "what happens when — for product, platform and people?",
-    thumb: "roadmap", what: "The plan over time: product, platform and people together.",
-    ex: "From an honest result on every pull request now, to open for every team by the end of the year.",
+    thumb: "roadmap", what: "The plan over time for product, platform and people.",
+    ex: "From an honest result on every pull request now, to open for every team by year end.",
     short: "one rule for the whole year: nothing on this plan moves work off our own machines.",
     notes: "Read each row left to right. The people row is the one most likely to slip, and it is the one the power/interest grid said matters most." });
   const lw = 1.3, cw = (AW - lw) / 4, x0 = AX + lw;
