@@ -199,11 +199,11 @@ pres.addSection({ title: S1 });
 
 // ---------- 3. The canvases at a glance ----------
 const STAGES = [
-  ["Why?", "the business", ["Business Model Canvas"]],
-  ["Who?", "the people", ["Persona Card", "Customer Journey Map", "Power / Interest Grid"]],
-  ["What?", "the service", ["Use Case Card", "Context View", "Service Blueprint", "Capability Map", "Capability Card"]],
-  ["How?", "the design", ["ASR Card", "QATT Card", "Decision Record (ADR)"]],
-  ["Where next?", "the plan", ["OKR Card", "Roadmap Canvas"]],
+  ["Why?", "the business", [["Business Model Canvas", "How it gives value, to whom, at what cost"]]],
+  ["Who?", "the people", [["Persona Card", "One kind of user: their day, wants, blocks"], ["Customer Journey Map", "Each step the user takes, and how it feels"], ["Power / Interest Grid", "Who has a say, who cares, who must own it"]]],
+  ["What?", "the service", [["Use Case Card", "One job: who starts it, the steps, the result"], ["Context View", "What is inside, and what it talks to"], ["Service Blueprint", "What the user sees, and what runs behind"], ["Capability Map", "Everything the business must be good at"], ["Capability Card", "One ability: people, process, tools"]]],
+  ["How?", "the design", [["ASR Card", "The few must-have rules that shape the design"], ["QATT Card", "A quality goal written as a number to test"], ["Decision Record (ADR)", "What we chose, what else we looked at, why"]]],
+  ["Where next?", "the plan", [["OKR Card", "The goal, and the numbers that prove it"], ["Roadmap Canvas", "What happens when: product, platform, people"]]],
 ];
 {
   const s = content(S1, "The canvases at a glance", `${TOTAL} canvases, grouped by the question each one answers`);
@@ -212,15 +212,16 @@ const STAGES = [
   const w = 2.3, gap = 0.1575;
   STAGES.forEach(([q, cap, list], i) => {
     const x = 0.6 + i * (w + gap);
-    s.addShape(SH.PENTAGON, { x, y: 1.95, w, h: 0.85, fill: { color: i % 2 ? C.accent1 : C.text2 }, objectName: "Stage" });
-    txt(s, [{ text: q, options: { fontSize: 20, bold: true, breakLine: true } }, { text: cap, options: { fontSize: 12 } }],
-      { x: x + 0.15, y: 1.95, w: w - 0.55, h: 0.85, color: C.background1, valign: "middle" });
-    list.forEach((name, j) => {
+    s.addShape(SH.PENTAGON, { x, y: 1.8, w, h: 0.7, fill: { color: i % 2 ? C.accent1 : C.text2 }, objectName: "Stage" });
+    txt(s, [{ text: q, options: { fontSize: 18, bold: true, breakLine: true } }, { text: cap, options: { fontSize: 11 } }],
+      { x: x + 0.15, y: 1.8, w: w - 0.55, h: 0.7, color: C.background1, valign: "middle" });
+    list.forEach(([name, hint], j) => {
       n += 1;
-      const y = 3.0 + j * 0.58;
-      box(s, x, y, w, 0.48, { name: "Canvas chip" });
-      num(s, x + 0.08, y + 0.07, n, 0.34);
-      txt(s, name, { x: x + 0.5, y, w: w - 0.58, h: 0.48, fontSize: 13, bold: true, color: C.text2, valign: "middle" });
+      const y = 2.62 + j * 0.71;
+      box(s, x, y, w, 0.65, { name: "Canvas chip" });
+      num(s, x + 0.04, y + 0.05, n, 0.3);
+      txt(s, [{ text: name, options: { fontSize: 11.5, bold: true, color: C.text2, breakLine: true } }, { text: hint, options: { fontSize: 10, color: C.text1 } }],
+        { x: x + 0.38, y: y + 0.05, w: w - 0.45, h: 0.57, valign: "top" });
     });
   });
   inShort(s, "start with why and who. The design canvases only make sense after those.");
@@ -299,37 +300,41 @@ pres.addSection({ title: S2 });
     thumb: "bmc", what: "Nine boxes that show how something gives value, to whom, and at what cost.",
     ex: "Ticket in, tested pull request out. It costs machines and one person; it gives senior hours back.",
     short: "AIForge sells nothing. It gives senior hours back, inside our own walls.",
-    notes: "This is the internal-product view of the business model: the 'customers' are our own engineers and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
+    notes: "This is the internal-product view of the business model: the 'customers' are our own senior developers, junior developers and QA engineers (who use it for test automation), and the 'revenue' is time handed back. No customer or programme detail is shown, on purpose." });
   const cw = AW / 5, g = 0.07, top = 2.72, hh = (top - g) / 2;
   const B = (i, y, h, t, b, o) => cell(s, AX + i * cw, y, cw - g, h, t, b, o);
-  B(0, AY, top, "WHO HELPS", lines(["IT operations", "QA and testers"]));
+  B(0, AY, top, "WHO HELPS", lines(["IT operations", "Platform operator"]));
   B(1, AY, hh, "WHAT IT DOES", "Plan, write, test, check");
   B(1, AY + hh + g, hh, "WHAT IT NEEDS", lines(["Own machines", "AI models", "Past run notes"]));
   B(2, AY, top, "WHAT IT GIVES", lines(["Ticket in, tested pull request out.", "", "Code never leaves the building."]), { fill: C.accent2, lineColor: HEX.accent4, lw: 1.5, fs: 13, bold: true, tcol: C.text2 });
   B(3, AY, hh, "TRUST", "An honest result on every pull request");
   B(3, AY + hh + g, hh, "HOW TO REACH IT", lines(["Chat", "Ticket tracker"]));
-  B(4, AY, top, "WHO IT SERVES", lines(["Delivery engineers", "Junior developers", "Engineering leads"]));
+  B(4, AY, top, "WHO IT SERVES", lines(["Senior developers", "Junior developers", "QA engineers (test automation)"]));
   const by = AY + top + g, bh = AH - top - g, half = AW / 2;
   cell(s, AX, by, half - g, bh, "WHAT IT COSTS", "Machines, computing time, and one person to run it", { fill: TINT.orange, tcol: C.accent4 });
-  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for the hard work; more delivered by the same team", { fill: TINT.green, tcol: C.accent5 });
+  cell(s, AX + half, by, half - g, bh, "WHAT COMES BACK", "Senior hours freed for hard work; juniors move faster; QA gets tests written for them", { fill: TINT.green, tcol: C.accent5 });
 }
 
 // ---------- 6. Persona Card ----------
 {
   const s = canvasSlide({ section: S2, n: 2, stage: "Who?", name: "Persona Card", q: "who exactly are we building for?",
     thumb: "persona", what: "One page about one real kind of user, in their own words.",
-    ex: "The delivery engineer: “Half my week goes on work I already know how to do.”",
-    short: "it is built for the delivery engineer. If their day does not change, nothing else matters.",
-    notes: "Three personas exist: delivery engineer (primary), junior developer, engineering lead. Only the primary one is drawn. Honest adoption test: do they file a ticket, or still walk over to a senior? Today, mostly the second." });
+    ex: "The senior developer: “Half my week goes on work I already know how to do.”",
+    short: "built for senior developers first, then juniors and QA engineers.",
+    notes: "Three personas exist: senior developer (primary), junior developer, QA engineer (uses AIForge to write and run automated tests). Only the primary one is drawn in full. Honest adoption test: does a junior or QA engineer file a ticket, or still walk over to a senior? Today, mostly the second." });
   box(s, AX, AY, AW, AH, { name: "Persona card" });
-  person(s, AX + 0.6, AY + 0.3, 1.3);
-  pill(s, AX + 0.45, AY + 1.75, 1.6, 0.32, "PRIMARY PERSONA", C.accent1, C.background1);
-  txt(s, "Delivery engineer", { x: AX + 0.1, y: AY + 2.15, w: 2.3, h: 0.4, fontSize: 15, bold: true, color: C.text2, align: "center" });
-  txt(s, "“Half my week goes on work I already know how to do.”", { x: AX + 0.2, y: AY + 2.6, w: 2.1, h: 1.3, fontSize: 14, italic: true, color: C.accent1, align: "center" });
+  person(s, AX + 0.6, AY + 0.2, 1.2);
+  pill(s, AX + 0.45, AY + 1.5, 1.6, 0.32, "PRIMARY PERSONA", C.accent1, C.background1);
+  txt(s, "Senior developer", { x: AX + 0.1, y: AY + 1.88, w: 2.3, h: 0.35, fontSize: 15, bold: true, color: C.text2, align: "center" });
+  txt(s, "“Half my week goes on work I already know how to do.”", { x: AX + 0.2, y: AY + 2.25, w: 2.1, h: 0.85, fontSize: 13, italic: true, color: C.accent1, align: "center" });
+  txt(s, [{ text: "ALSO FOR", options: { fontSize: 10, bold: true, color: C.accent6, breakLine: true } },
+    { text: "Junior developers", options: { bold: true, breakLine: true } }, { text: "help without waiting for a senior", options: { breakLine: true } },
+    { text: "QA engineers", options: { bold: true, breakLine: true } }, { text: "test automation written for them" }],
+    { x: AX + 0.05, y: AY + 3.0, w: 2.45, h: 0.98, fontSize: 10, align: "center" });
   const qx = AX + 2.55, qw = (AW - 2.55 - 0.2 - 0.1) / 2, qh = (AH - 0.4 - 0.1) / 2;
   const Q = [
-    ["THEIR DAY", ["Looks after part of a live system", "Three to six small tickets a week", "Interrupted often; little quiet time"], C.background2, C.accent1],
-    ["WHAT THEY WANT", ["Routine code done for them", "Keep the interesting work", "Never hand code to an outside service"], TINT.green, C.accent5],
+    ["THEIR DAY", ["Owns the hard parts of a live system", "Juniors and QA ask them for help all day", "Little quiet time for deep work"], C.background2, C.accent1],
+    ["WHAT THEY WANT", ["Routine code done for them", "Keep the hard, interesting work", "Never hand code to an outside service"], TINT.green, C.accent5],
     ["WHAT BLOCKS THEM", ["A pull request they do not trust", "A tool that stops half-way and says nothing", "Lots of setup before the tool helps"], TINT.orange, C.accent4],
     ["WHAT EARNS TRUST", ["It compiles, or it says it failed", "“I could not do this” in the first line", "A second AI checked the work"], TINT.teal, C.accent1],
   ];
@@ -379,7 +384,7 @@ pres.addSection({ title: S2 });
 {
   const s = canvasSlide({ section: S2, n: 4, stage: "Who?", name: "Power / Interest Grid", q: "who must we win over, and who must own it?",
     thumb: "grid", what: "A two-by-two: each group placed by its power and its interest.",
-    ex: "IT and QA must move from watching to owning. The platform needs a second person.",
+    ex: "Devs and QA are the users. IT must move from watching to owning; QA must own the test check.",
     short: "the tool works. What is left is people — three jobs still have no owner.",
     notes: "Positions are our reading of where each group stands today; the arrows are the moves the roadmap needs. IT operations must go from watching to owning the model service; QA must own the test gate on AI pull requests; the platform needs a second operator." });
   const gx = AX + 0.45, gy = AY, gw = 5.3, gh = 3.6, qw = gw / 2, qh = gh / 2;
@@ -395,14 +400,14 @@ pres.addSection({ title: S2 });
   seg(s, gx + 1.85, gy + 0.62, gx + 3.15, gy + 0.62, HEX.accent4, 2, { dashType: "dash", endArrowType: "triangle" });
   chip("Engineering lead", 3.3, 0.42, 1.75, C.text2, C.background1);
   chip("Platform operator", 3.3, 1.2, 1.75, C.text2, C.background1);
-  chip("Delivery engineers", 2.78, 2.25, 1.75, C.accent1, C.background1);
-  chip("QA and testers", 3.45, 2.88, 1.6, C.accent4, C.background1);
+  chip("Senior developers", 2.78, 2.25, 1.75, C.accent1, C.background1);
+  chip("QA engineers", 3.45, 2.88, 1.6, C.accent4, C.background1);
   seg(s, gx + 4.85, gy + 2.83, gx + 4.85, gy + 1.92, HEX.accent4, 2, { dashType: "dash", endArrowType: "triangle" });
   chip("Junior developers", 0.55, 2.55, 1.75, C.accent1, C.background1);
   const lx = gx + gw + 0.25, lwid = AX + AW - lx;
   box(s, lx, AY, lwid, AH, { fill: C.accent2, lineColor: LINE, name: "Moves card" });
   txt(s, "The moves we need", { x: lx + 0.15, y: AY + 0.15, w: lwid - 0.3, h: 0.35, fontSize: 15, bold: true, color: C.text2 });
-  const moves = [["IT operations", "watching → owning the AI models"], ["QA and testers", "affected → owning the test check"], ["Platform operator", "one person → two"]];
+  const moves = [["IT operations", "watching → owning the AI models"], ["QA engineers", "users → owning the test check"], ["Platform operator", "one person → two"]];
   moves.forEach(([a, b], i) => {
     txt(s, [{ text: a, options: { bold: true, breakLine: true } }, { text: b }], { x: lx + 0.15, y: AY + 0.65 + i * 1.08, w: lwid - 0.3, h: 1.0, fontSize: 13 });
   });
@@ -414,14 +419,14 @@ pres.addSection({ title: S3 });
 {
   const s = canvasSlide({ section: S3, n: 5, stage: "What?", name: "Use Case Card", q: "who starts it, what happens, and what comes out?",
     thumb: "usecase", what: "One job the system does: who starts it, the steps, the result.",
-    ex: "An engineer files a ticket. Seven steps later a pull request is ready to read.",
+    ex: "A developer or QA engineer files a ticket. Seven steps later a pull request is ready to read.",
     short: "the senior spends minutes reading instead of hours writing.",
     notes: "The use case is 'one small change'. Simple tickets skip most of the seven steps; only real multi-file work runs them all." });
   const c1 = 2.45, c2 = 3.55, c3 = AW - c1 - c2 - 0.7;
   box(s, AX, AY, c1, 1.95, { name: "Actor card" });
   person(s, AX + 0.15, AY + 0.4, 0.75);
   txt(s, "ACTOR AND TRIGGER", { x: AX + 0.11, y: AY + 0.07, w: c1 - 0.2, h: 0.26, fontSize: 11, bold: true, color: C.accent1 });
-  txt(s, [{ text: "Delivery engineer", options: { bold: true, breakLine: true } }, { text: "files a ticket in the tracker" }], { x: AX + 1.0, y: AY + 0.4, w: c1 - 1.1, h: 0.8, fontSize: 12.5, valign: "middle" });
+  txt(s, [{ text: "Developer or QA engineer", options: { bold: true, breakLine: true } }, { text: "files a ticket in the tracker" }], { x: AX + 1.0, y: AY + 0.4, w: c1 - 1.1, h: 0.8, fontSize: 12.5, valign: "middle" });
   pill(s, AX + 0.15, AY + 1.4, c1 - 0.3, 0.36, "Runs several times a week", C.accent3, C.text2);
   cell(s, AX, AY + 2.05, c1, AH - 2.05, "MUST ALREADY BE TRUE", [
     { text: "The ticket names a real project", options: { bullet: { indent: 12 }, breakLine: true } },
@@ -506,7 +511,7 @@ pres.addSection({ title: S3 });
     thumb: "capmap", what: "A grid of everything the business must be able to do.",
     ex: "AIForge does 11 of the 18 jobs today and 3 more in part. The rest is still all people.",
     short: "11 of 18 done by AIForge today, 3 partly. The rest still needs an owner.",
-    notes: "Blue = AIForge does this today. Yellow = partly, being built. White = still all people. The white boxes are mostly about ownership: prioritising, merging, measuring." });
+    notes: "Grey = AIForge does this today. Yellow = partly, being built. White with a dashed edge = still all people. The white boxes are mostly about ownership: prioritising, merging, measuring." });
   const cw = AW / 6;
   const D = "d", P = "p", H = "h";
   const cols = [
@@ -550,7 +555,7 @@ pres.addSection({ title: S3 });
   });
   const cw = (AW - 0.24) / 3, cy = AY + 0.9, ch = 2.15;
   const cols = [
-    ["People", ["One person runs the platform today", "Delivery engineer reviews the output", "Nobody owns the AI models yet"], C.accent1],
+    ["People", ["One person runs the platform today", "Senior developer reviews the output", "Nobody owns the AI models yet"], C.accent1],
     ["Process", ["Plan written before any code", "Each part built in its own copy", "Only code that builds is accepted"], C.text2],
     ["Tools", ["AI models on our own machines", "Code map and memory of past runs", "Build and test tools already in use"], C.accent5],
   ];
@@ -609,7 +614,7 @@ pres.addSection({ title: S4 });
     short: "splitting the work beat waiting for a bigger model — and we have the number to show it.",
     notes: "QATT = quality attribute scenario. The top chain is one scenario in the six standard IASA parts: source, stimulus, environment, artifact, response, response measure. The three cards below are further scenarios in short form. Said out loud: hard compile-and-fix work still needs a human finish." });
   txt(s, [{ text: "SCENARIO   ", options: { bold: true, color: C.accent1, fontSize: 11 } }, { text: "A multi-file ticket comes out as one working change", options: { bold: true, color: C.text2 } }], { x: AX, y: AY, w: AW, h: 0.36, fontSize: 14, valign: "middle" });
-  const parts = [["WHO", "A delivery engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
+  const parts = [["WHO", "A developer or QA engineer"], ["DOES WHAT", "files a ticket that touches five files"], ["WHERE", "a normal run on our own machines"], ["TO WHAT", "the AIForge agents"], ["RESULT", "one merged change that builds"], ["MEASURE", "0 → 53 working linked lines"]];
   const pw = AW / 6;
   parts.forEach(([t, b], i) => {
     const last = i === 5;
@@ -682,7 +687,7 @@ pres.addSection({ title: S5 });
   const krs = [
     ["Tickets that end in an accepted pull request", null, "Not measured", "3 in 4", C.accent4],
     ["Files one ticket can change cleanly", 0.45, "3 to 5", "8 to 10", C.accent4],
-    ["Tickets filed by people other than the leads", 0.06, "Almost none", "Half", C.accent4],
+    ["Tickets filed by juniors and QA engineers", 0.06, "Almost none", "Half", C.accent4],
     ["People who can run and fix the platform", 0.5, "1", "2", C.accent4],
     ["Runs where data left our network", 1, "Zero", "Zero", C.accent5],
   ];
